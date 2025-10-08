@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Politos Focus",
+  "description": "A focus app for couples, inspired by pixel art aesthetics. Motivate each other by sharing your focus sessions and sending rewards.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
