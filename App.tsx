@@ -546,11 +546,13 @@ const MainDisplay: React.FC<{
     const partnerDisplayName = partner === Character.Rapunzel ? 'Faryal 💛' : 'Asad 💛';
     
     return (
-        <div className="relative w-full h-screen bg-[#61bfff] flex flex-col overflow-hidden">
-            <SoundToggleButton isMuted={isMuted} onToggle={onToggleMute} />
-            <div className="absolute top-0 left-0 w-full h-full">
-                <img src={imageSrc} alt="Scene" className="w-full h-full object-cover"/>
-                 {!isAnyoneFocusing && (
+        <div className="relative w-full min-h-screen bg-[#61bfff]">
+            <img src={imageSrc} alt="Scene" className="w-full h-auto block"/>
+
+            <div className="absolute inset-0">
+                <SoundToggleButton isMuted={isMuted} onToggle={onToggleMute} />
+                
+                {!isAnyoneFocusing && (
                   <>
                     <div key="heart1" className="absolute top-[48%] left-[51%] text-3xl animate-float-up" style={{ animationDelay: '0s' }}>❤️</div>
                     <div key="heart2" className="absolute top-[50%] left-[49%] text-3xl animate-float-up" style={{ animationDelay: '0.8s' }}>❤️</div>
@@ -559,14 +561,14 @@ const MainDisplay: React.FC<{
                 {isAnyoneFocusing && (
                      <div className="absolute top-[42%] left-[50%] text-white text-3xl animate-sweat-drop" style={{ textShadow: '2px 2px #000a' }}>💧</div>
                 )}
-            </div>
-
-            {isUserFocusing && <Timer />}
-            {isUserFocusing && isPartnerFocusing && partnerStartTime && <PartnerTimer startTime={partnerStartTime} partnerName={partnerDisplayName} />}
-
-            <div className="relative z-10 flex flex-col justify-end items-center h-full p-8 pb-12 gap-6">
-                <h2 className="text-4xl md:text-5xl text-white minecraft-text text-center px-4 py-2 bg-black bg-opacity-40">{text}</h2>
-                <div className="min-w-[300px] text-center">{controls}</div>
+            
+                {isUserFocusing && <Timer />}
+                {isUserFocusing && isPartnerFocusing && partnerStartTime && <PartnerTimer startTime={partnerStartTime} partnerName={partnerDisplayName} />}
+            
+                <div className="absolute bottom-0 w-full z-10 flex flex-col items-center p-8 pb-12 gap-6">
+                    <h2 className="text-4xl md:text-5xl text-white minecraft-text text-center px-4 py-2 bg-black bg-opacity-40">{text}</h2>
+                    <div className="min-w-[300px] text-center">{controls}</div>
+                </div>
             </div>
         </div>
     );
