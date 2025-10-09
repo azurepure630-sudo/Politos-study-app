@@ -1,6 +1,6 @@
 {
-  "name": "Copy of Politos Focus",
-  "description": "A focus app for couples, inspired by pixel art aesthetics. Motivate each other by sharing your focus sessions and sending rewards.",
+  "name": "Politos Focus (final)",
+  "description": "A focus app for couples, inspired by pixel art aesthetics and the idea of sharing the same space despite distance. Motivate each other by sharing your focus sessions, sending love to each other and make use of MEI (Mutual exchange of inspiration).",
   "requestFramePermissions": [
     "microphone"
   ]
