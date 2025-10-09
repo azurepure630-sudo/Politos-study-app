@@ -22,6 +22,16 @@ function usePrevious<T>(value: T): T | undefined {
 
 // --- HELPERS & UI COMPONENTS ---
 
+const getCycleDateString = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    // The cycle starts at 1 AM UTC. So subtract 1 hour to align the date.
+    date.setUTCHours(date.getUTCHours() - 1); 
+    const year = date.getUTCFullYear();
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(blob);
@@ -585,7 +595,7 @@ const OnlinePresenceNotification: React.FC<{
     showSendHi: boolean;
     onSendHi: () => void;
 }> = ({ partnerName, showSendHi, onSendHi }) => (
-    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-xl px-4 py-2 border-4 border-green-800 shadow-[6px_6px_0px_#383838] flex flex-col items-center gap-2">
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-xl px-4 py-2 border-4 border-green-800 shadow-[6px_6px_0px_#383838] flex flex-col items-center gap-2 animate-fade-in-out">
         <p>{partnerName} is now online!</p>
         {showSendHi && (
             <div className="text-center">
@@ -697,9 +707,9 @@ const MessageNotification: React.FC<{
 const PowerCoupleStats: React.FC<{
     user: Character;
     partner: Character;
-    userStats: { totalFocusTime: number };
-    partnerStats: { totalFocusTime: number };
-    jointTime: number;
+    userStats: { today: number; yesterday: number };
+    partnerStats: { today: number; yesterday: number };
+    jointTime: { today: number; yesterday: number };
 }> = ({ user, partner, userStats, partnerStats, jointTime }) => {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -718,10 +728,22 @@ const PowerCoupleStats: React.FC<{
             {isOpen && (
                 <div className="absolute top-full left-0 mt-2 w-72 bg-[#c69a6c] p-4 border-4 border-[#7a5a3b] text-white text-2xl shadow-[6px_6px_0px_#383838]">
                     <h3 className="text-3xl minecraft-text mb-2 text-center">Power Stats</h3>
-                    <div className="space-y-2">
-                        <p>{user}: {formatTime(userStats.totalFocusTime)}</p>
-                        <p>{partner}: {formatTime(partnerStats.totalFocusTime)}</p>
-                        <p>Together: {formatTime(jointTime)}</p>
+                    <div className="space-y-3">
+                        <div>
+                            <p className="font-bold underline">{user}:</p>
+                            <p className="pl-4">Today: {formatTime(userStats.today)}</p>
+                            <p className="pl-4">Yesterday: {formatTime(userStats.yesterday)}</p>
+                        </div>
+                        <div>
+                             <p className="font-bold underline">{partner}:</p>
+                            <p className="pl-4">Today: {formatTime(partnerStats.today)}</p>
+                            <p className="pl-4">Yesterday: {formatTime(partnerStats.yesterday)}</p>
+                        </div>
+                         <div>
+                             <p className="font-bold underline">Together:</p>
+                            <p className="pl-4">Today: {formatTime(jointTime.today)}</p>
+                            <p className="pl-4">Yesterday: {formatTime(jointTime.yesterday)}</p>
+                        </div>
                     </div>
                 </div>
             )}
@@ -876,9 +898,14 @@ const App: React.FC = () => {
   const [partnerFocusStartTime, setPartnerFocusStartTime] = useState<number | null>(null);
   const [partnerTotalPausedTime, setPartnerTotalPausedTime] = useState<number | null>(null);
   const [partnerLastPauseStartTime, setPartnerLastPauseStartTime] = useState<number | null>(null);
-  const [userStats, setUserStats] = useState({ totalFocusTime: 0 });
-  const [partnerStats, setPartnerStats] = useState({ totalFocusTime: 0 });
-  const [jointTime, setJointTime] = useState(0);
+  
+  const [userTodayTime, setUserTodayTime] = useState(0);
+  const [userYesterdayTime, setUserYesterdayTime] = useState(0);
+  const [partnerTodayTime, setPartnerTodayTime] = useState(0);
+  const [partnerYesterdayTime, setPartnerYesterdayTime] = useState(0);
+  const [jointTodayTime, setJointTodayTime] = useState(0);
+  const [jointYesterdayTime, setJointYesterdayTime] = useState(0);
+
   const [sessionType, setSessionType] = useState<SessionType>(SessionType.None);
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [receivedReward, setReceivedReward] = useState<Reward | null>(null);
@@ -895,6 +922,7 @@ const App: React.FC = () => {
 
 
   const musicRef = useRef<HTMLAudioElement>(null);
+  const onlineNotificationTimerRef = useRef<number | null>(null);
   const prevPartnerFocus = usePrevious(partnerFocus);
   const prevIsPartnerOnline = usePrevious(isPartnerOnline);
 
@@ -902,18 +930,18 @@ const App: React.FC = () => {
   
   const handleEnd = useCallback(async () => {
     if (!userCharacter) return;
-
     const now = Date.now();
-    const rootSnapshot = await database.ref('/').once('value');
-    const rootData = rootSnapshot.val();
-    const allUsersData = rootData.users;
-    const jointData = rootData.joint || { totalFocusTime: 0, lastUpdated: 0 };
-
-    if (!allUsersData || !allUsersData[userCharacter] || !allUsersData[partnerCharacter]) return;
     
-    const userData = allUsersData[userCharacter];
-    const partnerData = allUsersData[partnerCharacter];
+    const userRef = database.ref(`users/${userCharacter}`);
+    const partnerRef = database.ref(`users/${partnerCharacter}`);
 
+    const [userSnapshot, partnerSnapshot] = await Promise.all([userRef.once('value'), partnerRef.once('value')]);
+    
+    const userData = userSnapshot.val();
+    const partnerData = partnerSnapshot.val();
+
+    if (!userData || !partnerData) return;
+    
     if ((userData.focusState !== FocusState.Focusing && userData.focusState !== FocusState.Paused) || !userData.focusStartTime) {
         return; 
     }
@@ -923,48 +951,29 @@ const App: React.FC = () => {
         finalTotalPausedTime += (now - userData.lastPauseStartTime);
     }
     const sessionDurationMs = (now - userData.focusStartTime) - finalTotalPausedTime;
-    const sessionDurationSec = sessionDurationMs > 0 ? sessionDurationMs / 1000 : 0;
+    const sessionDurationSec = sessionDurationMs > 0 ? Math.floor(sessionDurationMs / 1000) : 0;
 
-    const nowInUTC = new Date(now);
-    const cycleStartUTC = new Date(Date.UTC(nowInUTC.getUTCFullYear(), nowInUTC.getUTCMonth(), nowInUTC.getUTCDate()));
-    cycleStartUTC.setUTCHours(1, 0, 0, 0); 
-    if (nowInUTC.getUTCHours() < 1) {
-        cycleStartUTC.setUTCDate(cycleStartUTC.getUTCDate() - 1);
-    }
-    const cycleStartTimestamp = cycleStartUTC.getTime();
-
+    const todayDateString = getCycleDateString(now);
     const updates: { [key: string]: any } = {};
 
-    const userLastUpdated = userData.statsLastUpdated || 0;
-    const userStatsNeedReset = userLastUpdated < cycleStartTimestamp;
-    const baseUserTotalTime = userStatsNeedReset ? 0 : (userData.totalFocusTime || 0);
-    const newUserTotalFocusTime = baseUserTotalTime + sessionDurationSec;
-    updates[`/users/${userCharacter}/totalFocusTime`] = newUserTotalFocusTime;
-    updates[`/users/${userCharacter}/statsLastUpdated`] = now;
-
+    if (sessionDurationSec > 0) {
+        updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
+    }
+    
     if ((partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
-        const jointStartTime = Math.max(userData.focusStartTime, partnerData.focusStartTime);
-        
         let partnerFinalTotalPaused = partnerData.totalPausedTime || 0;
         if (partnerData.focusState === FocusState.Paused && partnerData.lastPauseStartTime) {
             partnerFinalTotalPaused += (now - partnerData.lastPauseStartTime);
         }
         
-        const userEffectiveTime = userData.focusStartTime + finalTotalPausedTime;
-        const partnerEffectiveTime = partnerData.focusStartTime + partnerFinalTotalPaused;
-
-        const effectiveJointStartTime = Math.max(userEffectiveTime, partnerEffectiveTime);
+        const userEffectiveStart = userData.focusStartTime + finalTotalPausedTime;
+        const partnerEffectiveStart = partnerData.focusStartTime + partnerFinalTotalPaused;
+        const effectiveJointStartTime = Math.max(userEffectiveStart, partnerEffectiveStart);
         const jointDurationMs = now - effectiveJointStartTime;
-        const jointDurationSec = jointDurationMs > 0 ? jointDurationMs / 1000 : 0;
-
+        const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
 
         if (jointDurationSec > 0) {
-            const jointLastUpdated = jointData.lastUpdated || 0;
-            const jointStatsNeedReset = jointLastUpdated < cycleStartTimestamp;
-            const baseJointTime = jointStatsNeedReset ? 0 : (jointData.totalFocusTime || 0);
-            const newJointTime = baseJointTime + jointDurationSec;
-            updates[`/joint/totalFocusTime`] = newJointTime;
-            updates[`/joint/lastUpdated`] = now;
+            updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
         }
     }
     
@@ -1046,22 +1055,8 @@ const App: React.FC = () => {
             handleEnd();
         }
     });
-    
-    const getCycleStartTimestamp = () => {
-        const now = Date.now();
-        const nowInUTC = new Date(now);
-        const cycleStartUTC = new Date(Date.UTC(nowInUTC.getUTCFullYear(), nowInUTC.getUTCMonth(), nowInUTC.getUTCDate()));
-        cycleStartUTC.setUTCHours(1, 0, 0, 0); 
-        if (nowInUTC.getUTCHours() < 1) {
-            cycleStartUTC.setUTCDate(cycleStartUTC.getUTCDate() - 1);
-        }
-        return cycleStartUTC.getTime();
-    };
-
-    const cycleStartTimestamp = getCycleStartTimestamp();
 
     const partnerRef = database.ref(`users/${partnerCharacter}`);
-    const jointRef = database.ref('joint');
     
     database.ref('.info/connected').on('value', (snapshot: any) => {
         if (snapshot.val() === false) return;
@@ -1084,11 +1079,6 @@ const App: React.FC = () => {
             setUserFocusStartTime(data.focusStartTime || null);
             setUserTotalPausedTime(data.totalPausedTime || null);
             setUserLastPauseStartTime(data.lastPauseStartTime || null);
-            const lastUpdated = data.statsLastUpdated || 0;
-            const statsNeedReset = lastUpdated < cycleStartTimestamp;
-            setUserStats({
-                totalFocusTime: statsNeedReset ? 0 : (data.totalFocusTime || 0),
-            });
         }
     };
     userStatusRef.on('value', onUserChange);
@@ -1103,32 +1093,14 @@ const App: React.FC = () => {
             setPartnerFocusStartTime(null);
             setPartnerTotalPausedTime(null);
             setPartnerLastPauseStartTime(null);
-            setPartnerStats({ totalFocusTime: 0 });
         } else {
             setPartnerFocus(data.focusState || FocusState.Idle);
             setPartnerFocusStartTime(data.focusStartTime || null);
             setPartnerTotalPausedTime(data.totalPausedTime || null);
             setPartnerLastPauseStartTime(data.lastPauseStartTime || null);
-            const lastUpdated = data.statsLastUpdated || 0;
-            const statsNeedReset = lastUpdated < cycleStartTimestamp;
-            setPartnerStats({
-                totalFocusTime: statsNeedReset ? 0 : (data.totalFocusTime || 0),
-            });
         }
     };
     partnerRef.on('value', onPartnerChange);
-
-    const onJointChange = (snapshot: any) => {
-        const data = snapshot.val();
-        if (data) {
-            const lastUpdated = data.lastUpdated || 0;
-            const statsNeedReset = lastUpdated < cycleStartTimestamp;
-            setJointTime(statsNeedReset ? 0 : (data.totalFocusTime || 0));
-        } else {
-            setJointTime(0);
-        }
-    };
-    jointRef.on('value', onJointChange);
     
     const onRewardReceived = (snapshot: any) => {
         const reward = snapshot.val();
@@ -1148,13 +1120,42 @@ const App: React.FC = () => {
     };
     userStatusRef.child('lastMessageReceived').on('value', onMessageReceived);
 
+    // --- DAILY STATS LISTENERS ---
+    const today = getCycleDateString(Date.now());
+    const yesterday = getCycleDateString(Date.now() - 24 * 60 * 60 * 1000);
+
+    const refs = {
+        userToday: database.ref(`dailyStats/${today}/${userCharacter}/totalFocusTime`),
+        userYesterday: database.ref(`dailyStats/${yesterday}/${userCharacter}/totalFocusTime`),
+        partnerToday: database.ref(`dailyStats/${today}/${partnerCharacter}/totalFocusTime`),
+        partnerYesterday: database.ref(`dailyStats/${yesterday}/${partnerCharacter}/totalFocusTime`),
+        jointToday: database.ref(`dailyStats/${today}/joint/totalFocusTime`),
+        jointYesterday: database.ref(`dailyStats/${yesterday}/joint/totalFocusTime`),
+    };
+
+    const listeners = {
+        userToday: (snap: any) => setUserTodayTime(snap.val() || 0),
+        userYesterday: (snap: any) => setUserYesterdayTime(snap.val() || 0),
+        partnerToday: (snap: any) => setPartnerTodayTime(snap.val() || 0),
+        partnerYesterday: (snap: any) => setPartnerYesterdayTime(snap.val() || 0),
+        jointToday: (snap: any) => setJointTodayTime(snap.val() || 0),
+        jointYesterday: (snap: any) => setJointYesterdayTime(snap.val() || 0),
+    };
+    
+    (Object.keys(refs) as Array<keyof typeof refs>).forEach(key => {
+        refs[key].on('value', listeners[key]);
+    });
+
+
     return () => {
         database.ref('.info/connected').off();
         userStatusRef.off('value', onUserChange);
         partnerRef.off('value', onPartnerChange);
-        jointRef.off('value', onJointChange);
         userStatusRef.child('lastRewardReceived').off('value', onRewardReceived);
         userStatusRef.child('lastMessageReceived').off('value', onMessageReceived);
+        (Object.keys(refs) as Array<keyof typeof refs>).forEach(key => {
+            refs[key].off('value', listeners[key]);
+        });
     };
   }, [userCharacter, partnerCharacter, handleEnd]);
   
@@ -1175,9 +1176,6 @@ const App: React.FC = () => {
       const elapsed = now - startTime - currentTotalPaused;
       return Math.floor(elapsed / 1000);
     };
-
-    const userTimerShouldRun = userFocus === FocusState.Focusing;
-    const partnerTimerShouldRun = partnerFocus === FocusState.Focusing;
 
     const interval = setInterval(() => {
       const userSeconds = calculateElapsed(userFocus, userFocusStartTime, userTotalPausedTime, userLastPauseStartTime);
@@ -1206,14 +1204,19 @@ const App: React.FC = () => {
 
   // --- ONLINE NOTIFICATION LOGIC ---
   useEffect(() => {
-      if (isPartnerOnline && !prevIsPartnerOnline && partnerFocus === FocusState.Idle) {
-          setShowOnlineNotification(true);
-      }
-      
-      if ((partnerFocus === FocusState.Focusing && prevPartnerFocus === FocusState.Idle) || !isPartnerOnline) {
-          setShowOnlineNotification(false);
-          setHiSent(false); // Reset hi sent status when partner joins or goes offline
-      }
+    if ((partnerFocus === FocusState.Focusing && prevPartnerFocus === FocusState.Idle) || !isPartnerOnline) {
+        if (onlineNotificationTimerRef.current) {
+            clearTimeout(onlineNotificationTimerRef.current);
+            onlineNotificationTimerRef.current = null;
+        }
+        setShowOnlineNotification(false);
+        setHiSent(false);
+    } else if (isPartnerOnline && !prevIsPartnerOnline && partnerFocus === FocusState.Idle) {
+        setShowOnlineNotification(true);
+        onlineNotificationTimerRef.current = window.setTimeout(() => {
+            setShowOnlineNotification(false);
+        }, 4000);
+    }
   }, [isPartnerOnline, prevIsPartnerOnline, partnerFocus, prevPartnerFocus]);
   
   // --- OFFLINE NOTIFICATION LOGIC ---
@@ -1393,9 +1396,9 @@ const App: React.FC = () => {
       <PowerCoupleStats 
         user={userCharacter}
         partner={partnerCharacter}
-        userStats={userStats}
-        partnerStats={partnerStats}
-        jointTime={jointTime}
+        userStats={{ today: userTodayTime, yesterday: userYesterdayTime }}
+        partnerStats={{ today: partnerTodayTime, yesterday: partnerYesterdayTime }}
+        jointTime={{ today: jointTodayTime, yesterday: jointYesterdayTime }}
       />
     </div>
   );
