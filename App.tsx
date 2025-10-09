@@ -574,6 +574,12 @@ const JoinNotification: React.FC<{ partnerName: string }> = ({ partnerName }) =>
     </div>
 );
 
+const OfflinePresenceNotification: React.FC<{ partnerName: string }> = ({ partnerName }) => (
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-gray-500 text-white text-xl px-4 py-2 border-4 border-gray-700 shadow-[6px_6px_0px_#383838] animate-fade-in-out">
+        {partnerName} is now offline.
+    </div>
+);
+
 const OnlinePresenceNotification: React.FC<{
     partnerName: string;
     showSendHi: boolean;
@@ -879,6 +885,7 @@ const App: React.FC = () => {
   const [receivedMessage, setReceivedMessage] = useState<GreetingMessage | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(true);
   const [showJoinNotification, setShowJoinNotification] = useState(false);
+  const [showOfflineNotification, setShowOfflineNotification] = useState(false);
   const [showOnlineNotification, setShowOnlineNotification] = useState(false);
   const [hiSent, setHiSent] = useState(false);
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
@@ -1209,6 +1216,17 @@ const App: React.FC = () => {
       }
   }, [isPartnerOnline, prevIsPartnerOnline, partnerFocus, prevPartnerFocus]);
   
+  // --- OFFLINE NOTIFICATION LOGIC ---
+  useEffect(() => {
+    if (!isPartnerOnline && prevIsPartnerOnline) {
+      setShowOfflineNotification(true);
+      const timer = setTimeout(() => {
+        setShowOfflineNotification(false);
+      }, 4000); // Duration of the fade-in-out animation
+      return () => clearTimeout(timer);
+    }
+  }, [isPartnerOnline, prevIsPartnerOnline]);
+
   const handleCharacterSelect = (character: Character) => {
     try {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -1337,6 +1355,7 @@ const App: React.FC = () => {
         showSendHi={userFocus === FocusState.Focusing && !hiSent}
         onSendHi={handleSendHi}
       />}
+      {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
       {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
       {receivedReward && <RewardNotification 
             reward={receivedReward} 
