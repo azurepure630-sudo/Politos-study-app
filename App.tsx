@@ -61,9 +61,10 @@ const Timer: React.FC<{ startTime: number }> = ({ startTime }) => {
     }, [startTime]);
 
     const formatTime = () => {
-        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
+        const mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
         const secs = (seconds % 60).toString().padStart(2, '0');
-        return `${mins}:${secs}`;
+        return `${hours}:${mins}:${secs}`;
     };
 
     return <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white text-3xl p-4 border-4 border-gray-800">{formatTime()}</div>;
@@ -85,9 +86,10 @@ const PartnerTimer: React.FC<{ startTime: number; partnerName: string; }> = ({ s
     }, [startTime]);
 
     const formatTime = () => {
-        const mins = Math.floor(elapsedSeconds / 60).toString().padStart(2, '0');
+        const hours = Math.floor(elapsedSeconds / 3600).toString().padStart(2, '0');
+        const mins = Math.floor((elapsedSeconds % 3600) / 60).toString().padStart(2, '0');
         const secs = (elapsedSeconds % 60).toString().padStart(2, '0');
-        return `${mins}:${secs}`;
+        return `${hours}:${mins}:${secs}`;
     };
 
     return (
@@ -864,6 +866,65 @@ const App: React.FC = () => {
 
   const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
   
+  const handleEnd = useCallback(async () => {
+    if (!userCharacter) return;
+
+    const now = Date.now();
+    const rootSnapshot = await database.ref('/').once('value');
+    const rootData = rootSnapshot.val();
+    const allUsersData = rootData.users;
+    const jointData = rootData.joint || { totalFocusTime: 0, lastUpdated: 0 };
+
+    if (!allUsersData || !allUsersData[userCharacter] || !allUsersData[partnerCharacter]) return;
+    
+    const userData = allUsersData[userCharacter];
+    const partnerData = allUsersData[partnerCharacter];
+
+    if (userData.focusState !== FocusState.Focusing || !userData.focusStartTime) {
+        return; 
+    }
+
+    const nowInUTC = new Date(now);
+    const cycleStartUTC = new Date(Date.UTC(nowInUTC.getUTCFullYear(), nowInUTC.getUTCMonth(), nowInUTC.getUTCDate()));
+    cycleStartUTC.setUTCHours(1, 0, 0, 0); 
+    if (nowInUTC.getUTCHours() < 1) {
+        cycleStartUTC.setUTCDate(cycleStartUTC.getUTCDate() - 1);
+    }
+    const cycleStartTimestamp = cycleStartUTC.getTime();
+
+    const updates: { [key: string]: any } = {};
+    const sessionDurationSec = (now - userData.focusStartTime) / 1000;
+
+    const userLastUpdated = userData.statsLastUpdated || 0;
+    const userStatsNeedReset = userLastUpdated < cycleStartTimestamp;
+    const baseUserTotalTime = userStatsNeedReset ? 0 : (userData.totalFocusTime || 0);
+    const newUserTotalFocusTime = baseUserTotalTime + sessionDurationSec;
+    updates[`/users/${userCharacter}/totalFocusTime`] = newUserTotalFocusTime;
+    updates[`/users/${userCharacter}/statsLastUpdated`] = now;
+
+    if (partnerData.focusState === FocusState.Focusing && partnerData.focusStartTime) {
+        const jointStartTime = Math.max(userData.focusStartTime, partnerData.focusStartTime);
+        const jointDurationSec = (now - jointStartTime) / 1000;
+
+        if (jointDurationSec > 0) {
+            const jointLastUpdated = jointData.lastUpdated || 0;
+            const jointStatsNeedReset = jointLastUpdated < cycleStartTimestamp;
+            const baseJointTime = jointStatsNeedReset ? 0 : (jointData.totalFocusTime || 0);
+            const newJointTime = baseJointTime + jointDurationSec;
+            updates[`/joint/totalFocusTime`] = newJointTime;
+            updates[`/joint/lastUpdated`] = now;
+        }
+    }
+    
+    updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
+    updates[`/users/${userCharacter}/focusStartTime`] = null;
+
+    await database.ref().update(updates);
+
+    setSessionType(SessionType.None);
+    setShowRewardModal(true);
+  }, [userCharacter, partnerCharacter]);
+  
     // --- FULLSCREEN HANDLING ---
     const toggleFullscreen = () => {
         const doc = document as any;
@@ -920,6 +981,17 @@ const App: React.FC = () => {
   // --- FIREBASE REAL-TIME LOGIC ---
   useEffect(() => {
     if (!userCharacter) return;
+
+    const userStatusRef = database.ref(`users/${userCharacter}`);
+
+    // Check for dangling session on load
+    userStatusRef.once('value', (snapshot: any) => {
+        const data = snapshot.val();
+        if (data && data.focusState === FocusState.Focusing && data.focusStartTime) {
+            console.log("Dangling focus session detected. Ending it now.");
+            handleEnd();
+        }
+    });
     
     const getCycleStartTimestamp = () => {
         const now = Date.now();
@@ -934,7 +1006,6 @@ const App: React.FC = () => {
 
     const cycleStartTimestamp = getCycleStartTimestamp();
 
-    const userStatusRef = database.ref(`users/${userCharacter}`);
     const partnerRef = database.ref(`users/${partnerCharacter}`);
     const jointRef = database.ref('joint');
     
@@ -1023,7 +1094,7 @@ const App: React.FC = () => {
         userStatusRef.child('lastRewardReceived').off('value', onRewardReceived);
         userStatusRef.child('lastMessageReceived').off('value', onMessageReceived);
     };
-  }, [userCharacter, partnerCharacter]);
+  }, [userCharacter, partnerCharacter, handleEnd]);
   
   // --- JOIN NOTIFICATION LOGIC ---
   useEffect(() => {
@@ -1084,65 +1155,6 @@ const App: React.FC = () => {
   const handleJoin = () => {
     updateUserFocusState(FocusState.Focusing);
     setSessionType(SessionType.Joint);
-  };
-
-  const handleEnd = async () => {
-    if (!userCharacter) return;
-
-    const now = Date.now();
-    const rootSnapshot = await database.ref('/').once('value');
-    const rootData = rootSnapshot.val();
-    const allUsersData = rootData.users;
-    const jointData = rootData.joint || { totalFocusTime: 0, lastUpdated: 0 };
-
-    if (!allUsersData || !allUsersData[userCharacter] || !allUsersData[partnerCharacter]) return;
-    
-    const userData = allUsersData[userCharacter];
-    const partnerData = allUsersData[partnerCharacter];
-
-    if (userData.focusState !== FocusState.Focusing || !userData.focusStartTime) {
-        return; 
-    }
-
-    const nowInUTC = new Date(now);
-    const cycleStartUTC = new Date(Date.UTC(nowInUTC.getUTCFullYear(), nowInUTC.getUTCMonth(), nowInUTC.getUTCDate()));
-    cycleStartUTC.setUTCHours(1, 0, 0, 0); 
-    if (nowInUTC.getUTCHours() < 1) {
-        cycleStartUTC.setUTCDate(cycleStartUTC.getUTCDate() - 1);
-    }
-    const cycleStartTimestamp = cycleStartUTC.getTime();
-
-    const updates: { [key: string]: any } = {};
-    const sessionDurationSec = (now - userData.focusStartTime) / 1000;
-
-    const userLastUpdated = userData.statsLastUpdated || 0;
-    const userStatsNeedReset = userLastUpdated < cycleStartTimestamp;
-    const baseUserTotalTime = userStatsNeedReset ? 0 : (userData.totalFocusTime || 0);
-    const newUserTotalFocusTime = baseUserTotalTime + sessionDurationSec;
-    updates[`/users/${userCharacter}/totalFocusTime`] = newUserTotalFocusTime;
-    updates[`/users/${userCharacter}/statsLastUpdated`] = now;
-
-    if (partnerData.focusState === FocusState.Focusing && partnerData.focusStartTime) {
-        const jointStartTime = Math.max(userData.focusStartTime, partnerData.focusStartTime);
-        const jointDurationSec = (now - jointStartTime) / 1000;
-
-        if (jointDurationSec > 0) {
-            const jointLastUpdated = jointData.lastUpdated || 0;
-            const jointStatsNeedReset = jointLastUpdated < cycleStartTimestamp;
-            const baseJointTime = jointStatsNeedReset ? 0 : (jointData.totalFocusTime || 0);
-            const newJointTime = baseJointTime + jointDurationSec;
-            updates[`/joint/totalFocusTime`] = newJointTime;
-            updates[`/joint/lastUpdated`] = now;
-        }
-    }
-    
-    updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
-    updates[`/users/${userCharacter}/focusStartTime`] = null;
-
-    await database.ref().update(updates);
-
-    setSessionType(SessionType.None);
-    setShowRewardModal(true);
   };
   
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
