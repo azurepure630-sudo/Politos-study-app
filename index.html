@@ -40,13 +40,13 @@
       .animate-float-up {
         animation: float-up 2s ease-out forwards;
       }
-      @keyframes sweat-drop {
-        0%, 100% { transform: translateY(0); opacity: 0; }
-        50% { opacity: 1; }
-        90% { transform: translateY(20px); opacity: 0;}
+      @keyframes brain-pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
       }
-      .animate-sweat-drop {
-        animation: sweat-drop 1.5s ease-in-out infinite;
+      @keyframes spark-fade {
+        0%, 100% { opacity: 0; transform: translateY(10px) scale(0.5); }
+        50% { opacity: 1; transform: translateY(-10px) scale(1); }
       }
       @keyframes fade-in-out {
         0% { opacity: 0; transform: translate(-50%, -20px); }

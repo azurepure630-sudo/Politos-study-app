@@ -27,3 +27,9 @@ export type Reward = {
     audioBase64?: string;
     from: Character;
 };
+
+export type GreetingMessage = {
+    from: Character;
+    content: string;
+    type: 'GREETING';
+};
