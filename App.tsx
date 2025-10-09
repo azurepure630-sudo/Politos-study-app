@@ -922,6 +922,7 @@ const App: React.FC = () => {
 
 
   const musicRef = useRef<HTMLAudioElement>(null);
+  const silentAudioRef = useRef<HTMLAudioElement>(null);
   const onlineNotificationTimerRef = useRef<number | null>(null);
   const prevPartnerFocus = usePrevious(partnerFocus);
   const prevIsPartnerOnline = usePrevious(isPartnerOnline);
@@ -983,6 +984,8 @@ const App: React.FC = () => {
     updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
 
     await database.ref().update(updates);
+
+    silentAudioRef.current?.pause();
 
     setSessionType(SessionType.None);
     setShowRewardModal(true);
@@ -1258,6 +1261,7 @@ const App: React.FC = () => {
         totalPausedTime: 0,
         lastPauseStartTime: null,
       });
+      silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
     }
   };
 
@@ -1270,6 +1274,7 @@ const App: React.FC = () => {
         focusState: FocusState.Paused,
         lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
       });
+      silentAudioRef.current?.pause();
     }
   };
 
@@ -1283,11 +1288,12 @@ const App: React.FC = () => {
         const pausedDuration = Date.now() - data.lastPauseStartTime;
         const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
 
-        userRef.update({
+        await userRef.update({
             focusState: FocusState.Focusing,
             totalPausedTime: newTotalPausedTime,
             lastPauseStartTime: null
         });
+        silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
     }
   };
 
@@ -1352,6 +1358,7 @@ const App: React.FC = () => {
   return (
     <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
       <audio ref={musicRef} src={AUDIO.BACKGROUND_MUSIC} loop />
+      <audio ref={silentAudioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABgAAABkYXRhAAAAAA==" loop />
 
       {showOnlineNotification && <OnlinePresenceNotification 
         partnerName={partnerCharacter} 
