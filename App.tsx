@@ -23,9 +23,9 @@ function usePrevious<T>(value: T): T | undefined {
 // --- HELPERS & UI COMPONENTS ---
 
 const getCycleDateString = (timestamp: number): string => {
-    // Subtract 5 hours to make the day roll over at 5 AM UTC
-    const adjustedTimestamp = timestamp - (5 * 60 * 60 * 1000);
-    const date = new Date(adjustedTimestamp);
+    const date = new Date(timestamp);
+    // The cycle starts at 1 AM UTC. So subtract 1 hour to align the date.
+    date.setUTCHours(date.getUTCHours() - 1); 
     const year = date.getUTCFullYear();
     const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
     const day = date.getUTCDate().toString().padStart(2, '0');
@@ -87,7 +87,7 @@ const PartnerTimer: React.FC<{ elapsedSeconds: number; partnerName: string; }> =
 const SoundToggleButton: React.FC<{ isMuted: boolean; onToggle: () => void; }> = ({ isMuted, onToggle }) => (
     <button
         onClick={onToggle}
-        className="absolute top-20 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800"
+        className="absolute top-4 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800"
         aria-label={isMuted ? "Unmute" : "Mute"}
     >
         {isMuted ? '🔇' : '🔊'}
@@ -97,7 +97,7 @@ const SoundToggleButton: React.FC<{ isMuted: boolean; onToggle: () => void; }> =
 const FullscreenButton: React.FC<{ isFullscreen: boolean; onToggle: () => void; }> = ({ isFullscreen, onToggle }) => (
     <button
         onClick={onToggle}
-        className="absolute top-36 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800 md:hidden"
+        className="absolute top-20 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800 md:hidden"
         aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
     >
         {isFullscreen ? '⤢' : '⤡'}
@@ -490,538 +490,918 @@ const RewardNotification: React.FC<{
       });
     } else if (responseType === 'voice' && recordedBlob) {
         const audioBase64 = await blobToBase64(recordedBlob);
-        onRespond({
-            type: RewardType.Praise,
-            audioBase64,
+        onRespond({ 
+            type: RewardType.Praise, 
+            audioBase64 
         });
     }
-    setIsResponding(false);
-    setResponseType(null);
-    setResponseMessage('');
-    setRecordedBlob(null);
-  };
-  
-  const handleHeartResponse = () => {
-    onRespond({ type: RewardType.Heart });
-    onAcknowledge();
   };
 
-  const renderResponseUI = () => {
-      if (responseType === 'text') {
-          return (
-              <div className="flex flex-col gap-2 mt-2">
-                  <textarea 
-                      className="w-full p-2 text-lg bg-[#f3e5ab] text-black border-2 border-[#7a5a3b] focus:outline-none"
-                      placeholder="Write a reply..." 
+    const handleBackFromRespond = () => {
+        if (responseType) {
+            setResponseType(null);
+            setResponseMessage('');
+            setRecordedBlob(null);
+        } else {
+            setIsResponding(false);
+        }
+    };
+    
+    const renderResponseContent = () => {
+        if (responseType === 'text') {
+            return (
+                 <div className="flex flex-col gap-4">
+                    <textarea
+                      className="w-full p-2 text-xl bg-[#d2b48c] text-black border-4 border-[#7a5a3b] focus:outline-none placeholder-gray-600"
+                      placeholder="Thank you!"
                       value={responseMessage}
                       onChange={(e) => setResponseMessage(e.target.value)}
-                      rows={2}
-                  />
-                  <PixelButton onClick={handleSendResponse}>Send</PixelButton>
-                  <PixelButton onClick={() => setResponseType(null)} variant="secondary">Cancel</PixelButton>
-              </div>
-          );
-      }
-      if (responseType === 'voice') {
-          return (
-              <div className="flex flex-col gap-2 mt-2">
-                  <AudioRecorder onRecord={setRecordedBlob} />
-                  <PixelButton onClick={handleSendResponse} disabled={!recordedBlob}>Send</PixelButton>
-                  <PixelButton onClick={() => setResponseType(null)} variant="secondary">Cancel</PixelButton>
-              </div>
-          );
-      }
-      return null;
-  }
+                      rows={3}
+                    />
+                    <PixelButton onClick={handleSendResponse}>Send Note</PixelButton>
+                    <PixelButton onClick={handleBackFromRespond} variant="secondary">Back</PixelButton>
+                </div>
+            );
+        }
+        if (responseType === 'voice') {
+            return (
+                 <div className="flex flex-col gap-4">
+                    <AudioRecorder onRecord={setRecordedBlob} />
+                    <PixelButton onClick={handleSendResponse} disabled={!recordedBlob}>Send Voice Note</PixelButton>
+                    <PixelButton onClick={handleBackFromRespond} variant="secondary">Back</PixelButton>
+                </div>
+            );
+        }
+        // Choose response type
+        return (
+            <div className="flex flex-col gap-4">
+                <PixelButton onClick={() => setResponseType('text')}>📝 Write Response</PixelButton>
+                <PixelButton onClick={() => setResponseType('voice')}>🎤 Record Response</PixelButton>
+                <PixelButton onClick={handleBackFromRespond} variant="secondary">Back</PixelButton>
+            </div>
+        );
+    };
 
   return (
-    <div className="fixed bottom-4 right-4 bg-[#c69a6c] p-4 border-4 border-[#7a5a3b] shadow-lg z-40 max-w-sm w-[90%]">
-      {(reward.type === RewardType.Hugs || reward.type === RewardType.Kisses) && (
-          <img 
-            src={reward.type === RewardType.Hugs ? IMAGES.HUGS_GIF : IMAGES.KISSES_GIF} 
-            alt={reward.type}
-            className="absolute inset-0 w-full h-full object-cover z-0"
-          />
-        )}
-      <div className="relative z-10 text-center text-white text-shadow-md">
-        <h3 className="text-2xl minecraft-text flex items-center justify-center gap-2">
-            {emojiToShow && <span className="text-3xl animate-float-up">{emojiToShow}</span>}
-            {reward.from}
-        </h3>
-        <p className="text-xl break-words">{getRewardMessage()}</p>
-        
-        {reward.audioBase64 && <AudioPlayer src={reward.audioBase64} />}
-
-        {isResponding ? renderResponseUI() : (
-            <div className="flex flex-col gap-2 mt-4">
-               {reward.type !== RewardType.Heart && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <PixelButton onClick={() => setIsResponding(true)}>Respond</PixelButton>
-                    <PixelButton onClick={handleHeartResponse}>💛</PixelButton>
-                  </div>
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 animate-fade-in p-4">
+      <div className="bg-[#f3e5ab] p-8 border-8 border-[#a0522d] text-center w-[90%] max-w-lg">
+        {!isResponding ? (
+          <>
+            {emojiToShow && (
+              <div className="text-8xl mb-4 animate-bounce">
+                {emojiToShow}
+              </div>
+            )}
+            <h2 className="text-4xl md:text-5xl text-[#5c3c1a] minecraft-text mb-4">
+              {reward.from} {getRewardMessage()}
+            </h2>
+            {reward.audioBase64 && <AudioPlayer src={reward.audioBase64} />}
+            <div className="flex justify-center gap-4 mt-4">
+               {reward.type === RewardType.Heart ? (
+                    <PixelButton onClick={onDismiss}>Got it!</PixelButton>
+                ) : (
+                    <>
+                        <PixelButton onClick={onAcknowledge} variant="secondary" className="text-4xl !p-3">💛</PixelButton>
+                        <PixelButton onClick={() => setIsResponding(true)}>Respond</PixelButton>
+                    </>
                 )}
-                <PixelButton onClick={onAcknowledge} variant="secondary">
-                  Dismiss
-                </PixelButton>
             </div>
+          </>
+        ) : (
+          <div>
+            <h3 className="text-3xl text-[#5c3c1a] minecraft-text mb-4">Respond to {reward.from}:</h3>
+            {renderResponseContent()}
+          </div>
         )}
       </div>
-      <button onClick={onDismiss} className="absolute -top-3 -right-3 text-3xl bg-red-600 rounded-full w-8 h-8 flex items-center justify-center border-2 border-white text-white">
-          &times;
-      </button>
     </div>
   );
 };
 
+const JoinNotification: React.FC<{ partnerName: string }> = ({ partnerName }) => (
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#7a5a3b] text-white text-2xl px-6 py-3 border-4 border-[#4d3924] shadow-[6px_6px_0px_#383838] animate-fade-in-out">
+        {partnerName} has joined you!
+    </div>
+);
+
+const OfflinePresenceNotification: React.FC<{ partnerName: string }> = ({ partnerName }) => (
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-gray-500 text-white text-xl px-4 py-2 border-4 border-gray-700 shadow-[6px_6px_0px_#383838] animate-fade-in-out">
+        {partnerName} is now offline.
+    </div>
+);
+
+const OnlinePresenceNotification: React.FC<{
+    partnerName: string;
+    showSendHi: boolean;
+    onSendHi: () => void;
+}> = ({ partnerName, showSendHi, onSendHi }) => (
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-xl px-4 py-2 border-4 border-green-800 shadow-[6px_6px_0px_#383838] flex flex-col items-center gap-2 animate-fade-in-out">
+        <p>{partnerName} is now online!</p>
+        {showSendHi && (
+            <div className="text-center">
+                <p className="text-sm">say hiiii to your polito</p>
+                <PixelButton onClick={onSendHi} className="!text-lg !py-1 !px-3 !bg-yellow-500 !border-yellow-700 hover:!bg-yellow-600">
+                    Hiii 👋
+                </PixelButton>
+            </div>
+        )}
+    </div>
+);
+
+
+const MessageNotification: React.FC<{ 
+    message: GreetingMessage; 
+    onDismiss: () => void;
+    onReact: (rewardType: RewardType.Heart | RewardType.Kisses | RewardType.Hugs) => void; 
+    onRespond: (reward: Omit<Reward, 'from'>) => void;
+}> = ({ message, onDismiss, onReact, onRespond }) => {
+    const [isResponding, setIsResponding] = useState(false);
+    const [responseType, setResponseType] = useState<'text' | 'voice' | null>(null);
+    const [responseMessage, setResponseMessage] = useState('');
+    const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+
+    const handleSendResponse = async () => {
+        if (responseType === 'text' && responseMessage.trim()) {
+            onRespond({ type: RewardType.Praise, message: responseMessage.trim() });
+        } else if (responseType === 'voice' && recordedBlob) {
+            const audioBase64 = await blobToBase64(recordedBlob);
+            onRespond({ type: RewardType.Praise, audioBase64 });
+        }
+    };
+
+    const handleBackFromRespond = () => {
+        if (responseType) {
+            setResponseType(null);
+            setResponseMessage('');
+            setRecordedBlob(null);
+        } else {
+            setIsResponding(false);
+        }
+    };
+
+    const renderResponseContent = () => {
+        if (responseType === 'text') {
+            return (
+                 <div className="flex flex-col gap-4">
+                    <textarea
+                        className="w-full p-2 text-xl bg-[#d2b48c] text-black border-4 border-[#7a5a3b] focus:outline-none placeholder-gray-600"
+                        placeholder="Hiiii back!"
+                        value={responseMessage}
+                        onChange={(e) => setResponseMessage(e.target.value)}
+                        rows={3}
+                    />
+                    <PixelButton onClick={handleSendResponse} disabled={!responseMessage.trim()}>Send Note</PixelButton>
+                    <PixelButton onClick={handleBackFromRespond} variant="secondary">Back</PixelButton>
+                </div>
+            );
+        }
+        if (responseType === 'voice') {
+            return (
+                 <div className="flex flex-col gap-4">
+                    <AudioRecorder onRecord={setRecordedBlob} />
+                    <PixelButton onClick={handleSendResponse} disabled={!recordedBlob}>Send Voice Note</PixelButton>
+                    <PixelButton onClick={handleBackFromRespond} variant="secondary">Back</PixelButton>
+                </div>
+            );
+        }
+        // Choose response type
+        return (
+            <div className="flex flex-col gap-4">
+                <PixelButton onClick={() => setResponseType('text')}>📝 Write Response</PixelButton>
+                <PixelButton onClick={() => setResponseType('voice')}>🎤 Record Response</PixelButton>
+                <PixelButton onClick={handleBackFromRespond} variant="secondary">Back</PixelButton>
+            </div>
+        );
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
+            <div className="bg-[#f3e5ab] p-8 border-8 border-[#a0522d] text-center w-[90%] max-w-lg">
+                {!isResponding ? (
+                    <>
+                        <h2 className="text-4xl md:text-5xl text-[#5c3c1a] minecraft-text mb-4">
+                            Your polito says "{message.content}"
+                        </h2>
+                        <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-4">
+                            <div className="flex gap-2">
+                                <PixelButton onClick={() => onReact(RewardType.Heart)} className="text-4xl !p-3">💛</PixelButton>
+                                <PixelButton onClick={() => onReact(RewardType.Kisses)} className="text-4xl !p-3">💋</PixelButton>
+                                <PixelButton onClick={() => onReact(RewardType.Hugs)} className="text-4xl !p-3">🤗</PixelButton>
+                            </div>
+                            <PixelButton onClick={() => setIsResponding(true)}>Respond</PixelButton>
+                        </div>
+                        <PixelButton onClick={onDismiss} variant="secondary" className="mt-4 !text-xl !py-2">Dismiss</PixelButton>
+                    </>
+                ) : (
+                    <div>
+                        <h3 className="text-3xl text-[#5c3c1a] minecraft-text mb-4">Respond to {message.from}:</h3>
+                        {renderResponseContent()}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
 const PowerCoupleStats: React.FC<{
-    character: Character;
-    stats: Record<string, number>;
-    partnerStats: Record<string, number>;
-    onClose: () => void;
-}> = ({ character, stats, partnerStats, onClose }) => {
+    user: Character;
+    partner: Character;
+    userStats: { today: number; yesterday: number };
+    partnerStats: { today: number; yesterday: number };
+    jointTime: { today: number; yesterday: number };
+}> = ({ user, partner, userStats, partnerStats, jointTime }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const formatTime = (totalSeconds: number) => {
+        const seconds = Math.floor(totalSeconds);
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${minutes}m`;
+    };
+
+    return (
+        <div className="absolute top-36 md:top-20 left-4 z-20">
+            <PixelButton onClick={() => setIsOpen(!isOpen)} className="!py-2 !px-4 !text-xl">
+                Power couple stats 🦋
+            </PixelButton>
+            {isOpen && (
+                <div className="absolute top-full left-0 mt-2 w-72 bg-[#c69a6c] p-4 border-4 border-[#7a5a3b] text-white text-2xl shadow-[6px_6px_0px_#383838]">
+                    <h3 className="text-3xl minecraft-text mb-2 text-center">Power Stats</h3>
+                    <div className="space-y-3">
+                        <div>
+                            <p className="font-bold underline">{user}:</p>
+                            <p className="pl-4">Today: {formatTime(userStats.today)}</p>
+                            <p className="pl-4">Yesterday: {formatTime(userStats.yesterday)}</p>
+                        </div>
+                        <div>
+                             <p className="font-bold underline">{partner}:</p>
+                            <p className="pl-4">Today: {formatTime(partnerStats.today)}</p>
+                            <p className="pl-4">Yesterday: {formatTime(partnerStats.yesterday)}</p>
+                        </div>
+                         <div>
+                             <p className="font-bold underline">Together:</p>
+                            <p className="pl-4">Today: {formatTime(jointTime.today)}</p>
+                            <p className="pl-4">Yesterday: {formatTime(jointTime.yesterday)}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+const MainDisplay: React.FC<{
+    user: Character;
+    partner: Character;
+    userFocus: FocusState;
+    partnerFocus: FocusState;
+    onStart: () => void;
+    onJoin: () => void;
+    onEnd: () => void;
+    onPause: () => void;
+    onResume: () => void;
+    isMuted: boolean;
+    onToggleMute: () => void;
+    userElapsedSeconds: number;
+    partnerElapsedSeconds: number;
+    isUserInSession: boolean;
+    isPartnerInSession: boolean;
+    isFullscreen: boolean;
+    onToggleFullscreen: () => void;
+}> = ({
+    user, partner, userFocus, partnerFocus, onStart, onJoin, onEnd, onPause, onResume,
+    isMuted, onToggleMute, userElapsedSeconds, partnerElapsedSeconds,
+    isUserInSession, isPartnerInSession, isFullscreen, onToggleFullscreen
+}) => {
+    let imageSrc = IMAGES.IDLE;
+    let text = "Ready for today, Politos?";
+    let controls: React.ReactNode = null;
+
+    const isUserFocusing = userFocus === FocusState.Focusing;
+    const isPartnerFocusing = partnerFocus === FocusState.Focusing;
+    const isUserPaused = userFocus === FocusState.Paused;
+    const isPartnerPaused = partnerFocus === FocusState.Paused;
+    const isUserIdle = userFocus === FocusState.Idle;
+    const isPartnerIdle = partnerFocus === FocusState.Idle;
+
+    const isAnyoneFocusing = isUserFocusing || isPartnerFocusing;
+
+    // Determine controls, text, and image based on state matrix
+    if (isUserFocusing) {
+        controls = (
+            <div className="flex gap-4 justify-center">
+                <PixelButton onClick={onPause}>PAUSE</PixelButton>
+                <PixelButton onClick={onEnd} variant="danger">END SESSION</PixelButton>
+            </div>
+        );
+        if (isPartnerFocusing) {
+            imageSrc = IMAGES.JOINT_FOCUS;
+            text = "We politos are focussing.";
+        } else if (isPartnerPaused) {
+            imageSrc = user === Character.Flynn ? IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE : IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE;
+            text = "Focus time. Your polito is resting and will be right back";
+        } else { // Partner is idle
+            imageSrc = user === Character.Flynn ? IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE : IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE;
+            text = "Focus time. Your polito will join you.";
+        }
+    } else if (isUserPaused) {
+        controls = (
+            <div className="flex gap-4 justify-center">
+                <PixelButton onClick={onResume}>RESUME</PixelButton>
+                <PixelButton onClick={onEnd} variant="danger">END SESSION</PixelButton>
+            </div>
+        );
+        if (isPartnerFocusing) {
+            imageSrc = user === Character.Flynn ? IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE : IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
+            text = "Lil rests go a long way, but do return to your polito.";
+        } else if (isPartnerPaused) {
+            imageSrc = IMAGES.IDLE;
+            text = "Rest politos, lil rests go a long way";
+        } else { // Partner is idle
+            imageSrc = IMAGES.IDLE;
+            text = "You are on a break.";
+        }
+    } else if (isUserIdle) {
+        if (isPartnerFocusing) {
+            imageSrc = user === Character.Flynn ? IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE : IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
+            text = "Your polito is focussing.";
+            controls = <PixelButton onClick={onJoin}>JOIN THEIR SESSION</PixelButton>;
+        } else if (isPartnerPaused) {
+            imageSrc = user === Character.Flynn ? IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE : IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
+            text = "Your polito is on a well deserved rest.";
+            controls = <PixelButton onClick={onJoin}>JOIN THEIR SESSION</PixelButton>;
+        } else { // Partner is idle
+            imageSrc = IMAGES.IDLE;
+            text = "Ready for today, Politos?";
+            controls = <PixelButton onClick={onStart}>START "STUDY"</PixelButton>;
+        }
+    }
+
+    const partnerDisplayName = partner === Character.Rapunzel ? 'Faryal 💛' : 'Asad 💛';
+    
+    return (
+        <div className="relative w-full h-full md:h-auto">
+            <img src={imageSrc} alt="Scene" className="w-full h-full object-cover md:h-auto block"/>
+
+            <div className="absolute inset-0">
+                <SoundToggleButton isMuted={isMuted} onToggle={onToggleMute} />
+                <FullscreenButton isFullscreen={isFullscreen} onToggle={onToggleFullscreen} />
+                
+                {isUserIdle && isPartnerIdle && (
+                  <>
+                    <div key="heart1" className="absolute top-[48%] left-[51%] text-3xl animate-float-up" style={{ animationDelay: '0s' }}>❤️</div>
+                    <div key="heart2" className="absolute top-[50%] left-[49%] text-3xl animate-float-up" style={{ animationDelay: '0.8s' }}>❤️</div>
+                  </>
+                )}
+                
+                {isAnyoneFocusing && (
+                    <div className="absolute top-[42%] left-1/2 -translate-x-1/2 flex items-center justify-center gap-4">
+                        <div className="relative text-5xl" style={{ animation: `brain-pulse 2s infinite ease-in-out` }}>
+                            🧠
+                            <span className="absolute -top-2 -right-2 text-3xl" style={{ animation: `spark-fade 1.5s infinite linear`, animationDelay: '0.2s' }}>⚡</span>
+                        </div>
+                        {isUserFocusing && isPartnerFocusing && (
+                            <>
+                                <div className="text-4xl text-yellow-300" style={{ textShadow: '2px 2px #000a' }}>💛</div>
+                                <div className="relative text-5xl" style={{ animation: `brain-pulse 2s infinite ease-in-out`, animationDelay: '1s' }}>
+                                    🧠
+                                    <span className="absolute -top-2 -right-2 text-3xl" style={{ animation: `spark-fade 1.5s infinite linear`, animationDelay: '0.7s' }}>⚡</span>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+            
+                {isUserInSession && <Timer elapsedSeconds={userElapsedSeconds} />}
+                {isUserInSession && isPartnerInSession && <PartnerTimer elapsedSeconds={partnerElapsedSeconds} partnerName={partnerDisplayName} />}
+            
+                <div className="absolute bottom-0 w-full z-10 flex flex-col items-center p-8 pb-12 gap-6">
+                    <h2 className="text-4xl md:text-5xl text-white minecraft-text text-center px-4 py-2 bg-black bg-opacity-40">{text}</h2>
+                    <div className="min-w-[300px] text-center">{controls}</div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- MAIN APP COMPONENT ---
+
+const App: React.FC = () => {
+  const [userCharacter, setUserCharacter] = useState<Character | null>(null);
+  const [userFocus, setUserFocus] = useState<FocusState>(FocusState.Idle);
+  const [userFocusStartTime, setUserFocusStartTime] = useState<number | null>(null);
+  const [userTotalPausedTime, setUserTotalPausedTime] = useState<number | null>(null);
+  const [userLastPauseStartTime, setUserLastPauseStartTime] = useState<number | null>(null);
+  const [partnerFocus, setPartnerFocus] = useState<FocusState>(FocusState.Idle);
+  const [partnerFocusStartTime, setPartnerFocusStartTime] = useState<number | null>(null);
+  const [partnerTotalPausedTime, setPartnerTotalPausedTime] = useState<number | null>(null);
+  const [partnerLastPauseStartTime, setPartnerLastPauseStartTime] = useState<number | null>(null);
+  
+  const [userTodayTime, setUserTodayTime] = useState(0);
+  const [userYesterdayTime, setUserYesterdayTime] = useState(0);
+  const [partnerTodayTime, setPartnerTodayTime] = useState(0);
+  const [partnerYesterdayTime, setPartnerYesterdayTime] = useState(0);
+  const [jointTodayTime, setJointTodayTime] = useState(0);
+  const [jointYesterdayTime, setJointYesterdayTime] = useState(0);
+
+  const [sessionType, setSessionType] = useState<SessionType>(SessionType.None);
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [receivedReward, setReceivedReward] = useState<Reward | null>(null);
+  const [receivedMessage, setReceivedMessage] = useState<GreetingMessage | null>(null);
+  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [showJoinNotification, setShowJoinNotification] = useState(false);
+  const [showOfflineNotification, setShowOfflineNotification] = useState(false);
+  const [showOnlineNotification, setShowOnlineNotification] = useState(false);
+  const [hiSent, setHiSent] = useState(false);
+  const [isPartnerOnline, setIsPartnerOnline] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [userElapsedSeconds, setUserElapsedSeconds] = useState(0);
+  const [partnerElapsedSeconds, setPartnerElapsedSeconds] = useState(0);
+
+
+  const musicRef = useRef<HTMLAudioElement>(null);
+  const onlineNotificationTimerRef = useRef<number | null>(null);
+  const prevPartnerFocus = usePrevious(partnerFocus);
+  const prevIsPartnerOnline = usePrevious(isPartnerOnline);
+
+  const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
+  
+  const handleEnd = useCallback(async () => {
+    if (!userCharacter) return;
+    const now = Date.now();
+    
+    const userRef = database.ref(`users/${userCharacter}`);
+    const partnerRef = database.ref(`users/${partnerCharacter}`);
+
+    const [userSnapshot, partnerSnapshot] = await Promise.all([userRef.once('value'), partnerRef.once('value')]);
+    
+    const userData = userSnapshot.val();
+    const partnerData = partnerSnapshot.val();
+
+    if (!userData || !partnerData) return;
+    
+    if ((userData.focusState !== FocusState.Focusing && userData.focusState !== FocusState.Paused) || !userData.focusStartTime) {
+        return; 
+    }
+    
+    let finalTotalPausedTime = userData.totalPausedTime || 0;
+    if (userData.focusState === FocusState.Paused && userData.lastPauseStartTime) {
+        finalTotalPausedTime += (now - userData.lastPauseStartTime);
+    }
+    const sessionDurationMs = (now - userData.focusStartTime) - finalTotalPausedTime;
+    const sessionDurationSec = sessionDurationMs > 0 ? Math.floor(sessionDurationMs / 1000) : 0;
+
+    const todayDateString = getCycleDateString(now);
+    const updates: { [key: string]: any } = {};
+
+    if (sessionDurationSec > 0) {
+        updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
+    }
+    
+    if ((partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
+        let partnerFinalTotalPaused = partnerData.totalPausedTime || 0;
+        if (partnerData.focusState === FocusState.Paused && partnerData.lastPauseStartTime) {
+            partnerFinalTotalPaused += (now - partnerData.lastPauseStartTime);
+        }
+        
+        const userEffectiveStart = userData.focusStartTime + finalTotalPausedTime;
+        const partnerEffectiveStart = partnerData.focusStartTime + partnerFinalTotalPaused;
+        const effectiveJointStartTime = Math.max(userEffectiveStart, partnerEffectiveStart);
+        const jointDurationMs = now - effectiveJointStartTime;
+        const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
+
+        if (jointDurationSec > 0) {
+            updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
+        }
+    }
+    
+    updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
+    updates[`/users/${userCharacter}/focusStartTime`] = null;
+    updates[`/users/${userCharacter}/totalPausedTime`] = null;
+    updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
+
+    await database.ref().update(updates);
+
+    setSessionType(SessionType.None);
+    setShowRewardModal(true);
+  }, [userCharacter, partnerCharacter]);
+  
+    // --- FULLSCREEN HANDLING ---
+    const toggleFullscreen = () => {
+        const doc = document as any;
+        const docEl = document.documentElement as any;
+
+        const requestFullscreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+        const exitFullscreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+        const fullscreenElement = doc.fullscreenElement || doc.mozFullScreenElement || doc.webkitFullscreenElement || doc.msFullscreenElement;
+
+        if (!fullscreenElement) {
+            requestFullscreen.call(docEl).catch((err: Error) => {
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            if (exitFullscreen) {
+                exitFullscreen.call(doc);
+            }
+        }
+    };
+
+    useEffect(() => {
+        const onFullscreenChange = () => {
+            const doc = document as any;
+            const fullscreenElement = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+            setIsFullscreen(!!fullscreenElement);
+        };
+
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+        document.addEventListener('mozfullscreenchange', onFullscreenChange);
+        document.addEventListener('MSFullscreenChange', onFullscreenChange);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', onFullscreenChange);
+            document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+            document.removeEventListener('mozfullscreenchange', onFullscreenChange);
+            document.removeEventListener('MSFullscreenChange', onFullscreenChange);
+        };
+    }, []);
+
+  // --- AUDIO HANDLING ---
+  useEffect(() => {
+    const musicEl = musicRef.current;
+    
+    if (musicEl) musicEl.volume = 0.3;
+
+    if (isMuted) {
+        musicEl?.pause();
+    } else {
+        musicEl?.play().catch(e => console.error("Music play failed", e));
+    }
+  }, [isMuted]);
+
+  // --- FIREBASE REAL-TIME LOGIC ---
+  useEffect(() => {
+    if (!userCharacter) return;
+
+    const userStatusRef = database.ref(`users/${userCharacter}`);
+
+    // Check for dangling session on load
+    userStatusRef.once('value', (snapshot: any) => {
+        const data = snapshot.val();
+        if (data && (data.focusState === FocusState.Focusing || data.focusState === FocusState.Paused) && data.focusStartTime) {
+            console.log("Dangling focus session detected. Ending it now.");
+            handleEnd();
+        }
+    });
+
+    const partnerRef = database.ref(`users/${partnerCharacter}`);
+    
+    database.ref('.info/connected').on('value', (snapshot: any) => {
+        if (snapshot.val() === false) return;
+        
+        userStatusRef.onDisconnect().update({
+            isOnline: false,
+            focusState: FocusState.Idle,
+            focusStartTime: null,
+            totalPausedTime: null,
+            lastPauseStartTime: null,
+        }).then(() => {
+            userStatusRef.update({ isOnline: true });
+        });
+    });
+
+    const onUserChange = (snapshot: any) => {
+        const data = snapshot.val();
+        if (data) {
+            setUserFocus(data.focusState || FocusState.Idle);
+            setUserFocusStartTime(data.focusStartTime || null);
+            setUserTotalPausedTime(data.totalPausedTime || null);
+            setUserLastPauseStartTime(data.lastPauseStartTime || null);
+        }
+    };
+    userStatusRef.on('value', onUserChange);
+
+    const onPartnerChange = (snapshot: any) => {
+        const data = snapshot.val();
+        const partnerIsCurrentlyOnline = !!(data && data.isOnline);
+        setIsPartnerOnline(partnerIsCurrentlyOnline);
+
+        if (!partnerIsCurrentlyOnline) {
+            setPartnerFocus(FocusState.Idle);
+            setPartnerFocusStartTime(null);
+            setPartnerTotalPausedTime(null);
+            setPartnerLastPauseStartTime(null);
+        } else {
+            setPartnerFocus(data.focusState || FocusState.Idle);
+            setPartnerFocusStartTime(data.focusStartTime || null);
+            setPartnerTotalPausedTime(data.totalPausedTime || null);
+            setPartnerLastPauseStartTime(data.lastPauseStartTime || null);
+        }
+    };
+    partnerRef.on('value', onPartnerChange);
+    
+    const onRewardReceived = (snapshot: any) => {
+        const reward = snapshot.val();
+        if(reward) {
+            setReceivedReward(reward);
+            userStatusRef.child('lastRewardReceived').set(null);
+        }
+    };
+    userStatusRef.child('lastRewardReceived').on('value', onRewardReceived);
+
+    const onMessageReceived = (snapshot: any) => {
+        const message = snapshot.val();
+        if(message) {
+            setReceivedMessage(message);
+            userStatusRef.child('lastMessageReceived').set(null);
+        }
+    };
+    userStatusRef.child('lastMessageReceived').on('value', onMessageReceived);
+
+    // --- DAILY STATS LISTENERS ---
     const today = getCycleDateString(Date.now());
     const yesterday = getCycleDateString(Date.now() - 24 * 60 * 60 * 1000);
 
-    const formatTime = (totalSeconds = 0) => {
-        const hours = Math.floor(totalSeconds / 3600);
-        const mins = Math.floor((totalSeconds % 3600) / 60);
-        return `${hours}h ${mins}m`;
+    const refs = {
+        userToday: database.ref(`dailyStats/${today}/${userCharacter}/totalFocusTime`),
+        userYesterday: database.ref(`dailyStats/${yesterday}/${userCharacter}/totalFocusTime`),
+        partnerToday: database.ref(`dailyStats/${today}/${partnerCharacter}/totalFocusTime`),
+        partnerYesterday: database.ref(`dailyStats/${yesterday}/${partnerCharacter}/totalFocusTime`),
+        jointToday: database.ref(`dailyStats/${today}/joint/totalFocusTime`),
+        jointYesterday: database.ref(`dailyStats/${yesterday}/joint/totalFocusTime`),
     };
 
-    const myToday = stats[today] || 0;
-    const myYesterday = stats[yesterday] || 0;
-    const partnerToday = partnerStats[today] || 0;
-    const partnerYesterday = partnerStats[yesterday] || 0;
-    const partnerName = CHARACTER_DATA[character].partner;
-
-    return (
-        <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white text-xl p-4 border-4 border-gray-800 w-[90%] max-w-xs md:max-w-none md:w-auto z-20">
-            <button 
-                onClick={onClose} 
-                className="absolute -top-3 -right-3 text-3xl bg-red-600 rounded-full w-8 h-8 flex items-center justify-center border-2 border-white text-white"
-                aria-label="Close stats"
-            >
-              &times;
-            </button>
-            <h3 className="text-2xl text-center mb-2 minecraft-text">Power Couple Stats</h3>
-            <div className="grid grid-cols-3 gap-x-4 gap-y-1">
-                <div />
-                <div className="text-center font-bold">{character}</div>
-                <div className="text-center font-bold">{partnerName}</div>
-                
-                <div className="font-bold">Today</div>
-                <div className="text-center">{formatTime(myToday)}</div>
-                <div className="text-center">{formatTime(partnerToday)}</div>
-                
-                <div className="font-bold">Yesterday</div>
-                <div className="text-center">{formatTime(myYesterday)}</div>
-                <div className="text-center">{formatTime(partnerYesterday)}</div>
-            </div>
-        </div>
-    );
-};
-
-const GreetingNotification: React.FC<{ message: GreetingMessage; onDismiss: () => void; }> = ({ message, onDismiss }) => {
-    useEffect(() => {
-        const timer = setTimeout(onDismiss, 5000);
-        return () => clearTimeout(timer);
-    }, [onDismiss]);
-
-    return (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#c69a6c] p-6 border-4 border-[#7a5a3b] shadow-lg z-50 animate-fade-in-out text-center">
-            <p className="text-2xl text-white minecraft-text">
-                {message.from} says: "{message.content}"
-            </p>
-        </div>
-    );
-};
-
-// --- MAIN APP ---
-
-const App: React.FC = () => {
-    // STATE
-    const [character, setCharacter] = useState<Character | null>(() => localStorage.getItem('polito-character') as Character | null);
-    const [focusState, setFocusState] = useState<FocusState>(FocusState.Idle);
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
-    const [sessionType, setSessionType] = useState<SessionType>(SessionType.None);
-    const [rewards, setRewards] = useState<Reward[]>([]);
-    const [greetingMessage, setGreetingMessage] = useState<GreetingMessage | null>(null);
-    const [isMuted, setIsMuted] = useState(true);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const [showRewardModal, setShowRewardModal] = useState(false);
-    const [isStatsVisible, setIsStatsVisible] = useState(false);
+    const listeners = {
+        userToday: (snap: any) => setUserTodayTime(snap.val() || 0),
+        userYesterday: (snap: any) => setUserYesterdayTime(snap.val() || 0),
+        partnerToday: (snap: any) => setPartnerTodayTime(snap.val() || 0),
+        partnerYesterday: (snap: any) => setPartnerYesterdayTime(snap.val() || 0),
+        jointToday: (snap: any) => setJointTodayTime(snap.val() || 0),
+        jointYesterday: (snap: any) => setJointYesterdayTime(snap.val() || 0),
+    };
     
-    // PARTNER STATE
-    const [partnerFocusState, setPartnerFocusState] = useState<FocusState>(FocusState.Idle);
-    const [partnerElapsedSeconds, setPartnerElapsedSeconds] = useState(0);
-    
-    // STATS STATE
-    const [dailyStats, setDailyStats] = useState<Record<string, number>>({});
-    const [partnerDailyStats, setPartnerDailyStats] = useState<Record<string, number>>({});
+    (Object.keys(refs) as Array<keyof typeof refs>).forEach(key => {
+        refs[key].on('value', listeners[key]);
+    });
 
 
-    // REFS
-    const timerIntervalRef = useRef<number | null>(null);
-    const backgroundAudioRef = useRef<HTMLAudioElement | null>(null);
-
-    // DERIVED STATE
-    const partner = useMemo(() => character ? CHARACTER_DATA[character].partner : null, [character]);
-    const prevFocusState = usePrevious(focusState);
-
-    // DATA MIGRATION EFFECT
-    useEffect(() => {
-        if (!character) return;
-        const migrationKey = `migration_totalFocusTime_${character}`;
-        const hasMigrated = localStorage.getItem(migrationKey);
-
-        if (!hasMigrated) {
-            const userRef = database.ref(`users/${character}`);
-            userRef.once('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data && data.totalFocusTime && typeof data.totalFocusTime === 'number' && data.totalFocusTime > 0) {
-                    const yesterday = getCycleDateString(Date.now() - 24 * 60 * 60 * 1000);
-                    
-                    database.ref(`users/${character}/dailyStats/${yesterday}`).transaction((currentVal: number) => {
-                        return (currentVal || 0) + data.totalFocusTime;
-                    }).then(() => {
-                        userRef.child('totalFocusTime').remove();
-                        localStorage.setItem(migrationKey, 'true');
-                        console.log("Migration successful: totalFocusTime moved to yesterday's stats.");
-                    }).catch((error: Error) => {
-                        console.error("Migration transaction failed: ", error);
-                    });
-                } else {
-                     localStorage.setItem(migrationKey, 'true');
-                }
-            });
-        }
-    }, [character]);
-
-
-    // FIREBASE LISTENERS
-    useEffect(() => {
-        if (!character || !partner) return;
-
-        const userRef = database.ref(`users/${character}`);
-        const partnerRef = database.ref(`users/${partner}`);
-
-        const onUserChange = (snapshot: any) => {
-            const data = snapshot.val();
-            if (data) {
-                setDailyStats(data.dailyStats || {});
-            }
-        };
-
-        const onPartnerChange = (snapshot: any) => {
-            const data = snapshot.val();
-            if (data) {
-                setPartnerFocusState(data.focusState || FocusState.Idle);
-                setPartnerElapsedSeconds(data.elapsedSeconds || 0);
-                setPartnerDailyStats(data.dailyStats || {});
-            } else {
-                setPartnerFocusState(FocusState.Idle);
-                setPartnerElapsedSeconds(0);
-                setPartnerDailyStats({});
-            }
-        };
-        
-        const onReward = (snapshot: any) => {
-            const rewardData = snapshot.val();
-            if (rewardData) {
-                setRewards(prev => [...prev, rewardData]);
-                snapshot.ref.remove();
-            }
-        };
-
-        const onGreeting = (snapshot: any) => {
-            const greetingData = snapshot.val();
-            if (greetingData) {
-                setGreetingMessage(greetingData);
-                snapshot.ref.remove();
-            }
-        };
-
-        userRef.on('value', onUserChange);
-        partnerRef.on('value', onPartnerChange);
-        userRef.child('rewards').on('child_added', onReward);
-        userRef.child('greetings').on('child_added', onGreeting);
-
-        return () => {
-            userRef.off('value', onUserChange);
-            partnerRef.off('value', onPartnerChange);
-            userRef.child('rewards').off('child_added', onReward);
-            userRef.child('greetings').off('child_added', onGreeting);
-        };
-    }, [character, partner]);
-
-    // TIMER LOGIC
-    useEffect(() => {
-        if (focusState === FocusState.Focusing) {
-            timerIntervalRef.current = window.setInterval(() => {
-                setElapsedSeconds(prev => prev + 1);
-            }, 1000);
-        } else {
-            if (timerIntervalRef.current) {
-                clearInterval(timerIntervalRef.current);
-                timerIntervalRef.current = null;
-            }
-        }
-        return () => {
-            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        };
-    }, [focusState]);
-
-    // PUSH STATE TO FIREBASE
-    useEffect(() => {
-        if (!character) return;
-        const userRef = database.ref(`users/${character}`);
-        userRef.child('focusState').set(focusState);
-        
-        if (focusState === FocusState.Focusing && partnerFocusState === FocusState.Focusing) {
-             setSessionType(SessionType.Joint);
-        } else if (focusState === FocusState.Idle && partnerFocusState === FocusState.Idle) {
-             setSessionType(SessionType.None);
-        }
-        
-    }, [character, focusState, partnerFocusState]);
-    
-     useEffect(() => {
-        if (!character) return;
-        if (focusState !== FocusState.Focusing) return;
-
-        const userRef = database.ref(`users/${character}`);
-        userRef.child('elapsedSeconds').set(elapsedSeconds);
-
-        if (elapsedSeconds > 0 && elapsedSeconds % 10 === 0) {
-            const today = getCycleDateString(Date.now());
-            userRef.child(`dailyStats/${today}`).transaction((currentVal: number) => {
-                return (currentVal || 0) + 10;
-            });
-        }
-     }, [character, elapsedSeconds, focusState]);
-
-     // BACKGROUND AUDIO
-    useEffect(() => {
-        if (!backgroundAudioRef.current) {
-            const audio = new Audio(AUDIO.BACKGROUND_MUSIC);
-            audio.volume = 0.3;
-            audio.loop = true;
-            backgroundAudioRef.current = audio;
-        }
-        const audio = backgroundAudioRef.current;
-
-        const playAudio = () => {
-            if (audio && audio.paused) {
-                const playPromise = audio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.error("Audio playback was prevented:", error);
-                    });
-                }
-            }
-        };
-
-        if (!isMuted) {
-            playAudio();
-        } else {
-            audio.pause();
-        }
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible' && !isMuted) {
-                playAudio();
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [isMuted]);
-
-    // HANDLE STOP FOCUS LOGIC
-    useEffect(() => {
-        if (prevFocusState === FocusState.Focusing && focusState !== FocusState.Focusing) {
-            if (elapsedSeconds >= 60) {
-                setShowRewardModal(true);
-            }
-        }
-    }, [focusState, prevFocusState, elapsedSeconds]);
-
-
-    // HANDLERS
-    const handleCharacterSelect = (selectedCharacter: Character) => {
-        localStorage.setItem('polito-character', selectedCharacter);
-        setCharacter(selectedCharacter);
-        const partnerName = CHARACTER_DATA[selectedCharacter].partner;
-        database.ref(`users/${partnerName}/greetings`).push({
-            from: selectedCharacter,
-            content: "I'm here! Let's focus!",
-            type: 'GREETING',
+    return () => {
+        database.ref('.info/connected').off();
+        userStatusRef.off('value', onUserChange);
+        partnerRef.off('value', onPartnerChange);
+        userStatusRef.child('lastRewardReceived').off('value', onRewardReceived);
+        userStatusRef.child('lastMessageReceived').off('value', onMessageReceived);
+        (Object.keys(refs) as Array<keyof typeof refs>).forEach(key => {
+            refs[key].off('value', listeners[key]);
         });
     };
+  }, [userCharacter, partnerCharacter, handleEnd]);
+  
+  // --- TIMER CALCULATION LOGIC ---
+  useEffect(() => {
+    const calculateElapsed = (
+      focus: FocusState, 
+      startTime: number | null, 
+      totalPaused: number | null, 
+      lastPauseStart: number | null
+    ) => {
+      if (!startTime) return 0;
+      const now = Date.now();
+      let currentTotalPaused = totalPaused || 0;
+      if (focus === FocusState.Paused && lastPauseStart) {
+        currentTotalPaused += now - lastPauseStart;
+      }
+      const elapsed = now - startTime - currentTotalPaused;
+      return Math.floor(elapsed / 1000);
+    };
 
-    const handleStartFocus = () => {
-        if (focusState === FocusState.Idle || focusState === FocusState.Paused) {
-            setFocusState(FocusState.Focusing);
+    const interval = setInterval(() => {
+      const userSeconds = calculateElapsed(userFocus, userFocusStartTime, userTotalPausedTime, userLastPauseStartTime);
+      setUserElapsedSeconds(userSeconds > 0 ? userSeconds : 0);
+      
+      const partnerSeconds = calculateElapsed(partnerFocus, partnerFocusStartTime, partnerTotalPausedTime, partnerLastPauseStartTime);
+      setPartnerElapsedSeconds(partnerSeconds > 0 ? partnerSeconds : 0);
+    }, 1000);
+
+    return () => clearInterval(interval);
+
+  }, [
+    userFocus, userFocusStartTime, userTotalPausedTime, userLastPauseStartTime,
+    partnerFocus, partnerFocusStartTime, partnerTotalPausedTime, partnerLastPauseStartTime
+  ]);
+
+  // --- JOIN NOTIFICATION LOGIC ---
+  useEffect(() => {
+      if (userFocus === FocusState.Focusing && partnerFocus === FocusState.Focusing && prevPartnerFocus !== FocusState.Focusing) {
+          setShowJoinNotification(true);
+          setTimeout(() => {
+              setShowJoinNotification(false);
+          }, 4000);
+      }
+  }, [userFocus, partnerFocus, prevPartnerFocus]);
+
+  // --- ONLINE NOTIFICATION LOGIC ---
+  useEffect(() => {
+    if ((partnerFocus === FocusState.Focusing && prevPartnerFocus === FocusState.Idle) || !isPartnerOnline) {
+        if (onlineNotificationTimerRef.current) {
+            clearTimeout(onlineNotificationTimerRef.current);
+            onlineNotificationTimerRef.current = null;
         }
-    };
+        setShowOnlineNotification(false);
+        setHiSent(false);
+    } else if (isPartnerOnline && !prevIsPartnerOnline && partnerFocus === FocusState.Idle) {
+        setShowOnlineNotification(true);
+        onlineNotificationTimerRef.current = window.setTimeout(() => {
+            setShowOnlineNotification(false);
+        }, 4000);
+    }
+  }, [isPartnerOnline, prevIsPartnerOnline, partnerFocus, prevPartnerFocus]);
+  
+  // --- OFFLINE NOTIFICATION LOGIC ---
+  useEffect(() => {
+    if (!isPartnerOnline && prevIsPartnerOnline) {
+      setShowOfflineNotification(true);
+      const timer = setTimeout(() => {
+        setShowOfflineNotification(false);
+      }, 4000); // Duration of the fade-in-out animation
+      return () => clearTimeout(timer);
+    }
+  }, [isPartnerOnline, prevIsPartnerOnline]);
 
-    const handlePauseFocus = () => {
-        if (focusState === FocusState.Focusing) {
-            setFocusState(FocusState.Paused);
+  const handleCharacterSelect = (character: Character) => {
+    try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        const audioContext = new AudioContext();
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
         }
-    };
-    
-    const updateStatsOnStop = useCallback(() => {
-        if (!character || elapsedSeconds === 0) return;
-        const remainder = elapsedSeconds % 10;
-        if (remainder > 0) {
-            const today = getCycleDateString(Date.now());
-            database.ref(`users/${character}/dailyStats/${today}`).transaction((currentVal: number) => {
-                return (currentVal || 0) + remainder;
-            });
-        }
-    }, [character, elapsedSeconds]);
-
-    const handleStopFocus = () => {
-        updateStatsOnStop();
-        setFocusState(FocusState.Idle);
-        database.ref(`users/${character}/elapsedSeconds`).set(0);
-        setElapsedSeconds(0);
-    };
-
-    const handleSendReward = (reward: Omit<Reward, 'from'>) => {
-        if (character && partner) {
-            database.ref(`users/${partner}/rewards`).push({
-                ...reward,
-                from: character
-            });
-        }
-        setShowRewardModal(false);
-    };
-
-    const handleRewardModalSkip = () => {
-        setShowRewardModal(false);
-    };
-
-    const handleAcknowledgeReward = (rewardToAck: Reward) => {
-        setRewards(prev => prev.filter(r => r !== rewardToAck));
-    };
-    
-    const handleDismissReward = (rewardToDismiss: Reward) => {
-        setRewards(prev => prev.filter(r => r !== rewardToDismiss));
-    };
-    
-    const handleRespondToReward = (response: Omit<Reward, 'from'>, originalReward: Reward) => {
-        if (character && partner) {
-             database.ref(`users/${partner}/rewards`).push({
-                ...response,
-                from: character,
-            });
-        }
-       handleAcknowledgeReward(originalReward);
-    };
-    
-    const handleGreetingDismiss = () => {
-        setGreetingMessage(null);
-    };
-
-    const toggleMute = () => setIsMuted(prev => !prev);
-    const toggleFullscreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen();
-            setIsFullscreen(true);
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-                setIsFullscreen(false);
-            }
-        }
-    };
-
-    // RENDER LOGIC
-    if (!character) {
-        return <OnboardingScreen onSelect={handleCharacterSelect} />;
+    } catch (e) {
+        console.error("Could not initialize AudioContext", e);
     }
 
-    const partnerName = CHARACTER_DATA[character].partner;
+    database.ref(`users/${character}`).update({
+        focusState: FocusState.Idle,
+        focusStartTime: null,
+        isOnline: true,
+    });
+    setUserCharacter(character);
+    setIsMuted(false); 
+  };
+  
+  const startFocusing = () => {
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
+        focusState: FocusState.Focusing,
+        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
+        totalPausedTime: 0,
+        lastPauseStartTime: null,
+      });
+    }
+  };
 
-    const getBackgroundImage = () => {
-        const isFlynnFocusing = (character === Character.Flynn && focusState === FocusState.Focusing) || (partnerName === Character.Flynn && partnerFocusState === FocusState.Focusing);
-        const isRapunzelFocusing = (character === Character.Rapunzel && focusState === FocusState.Focusing) || (partnerName === Character.Rapunzel && partnerFocusState === FocusState.Focusing);
-        
-        if(isFlynnFocusing && isRapunzelFocusing) return IMAGES.JOINT_FOCUS;
-        if(isFlynnFocusing) return IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
-        if(isRapunzelFocusing) return IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE;
-        return IMAGES.IDLE;
-    };
+  const handleStart = () => startFocusing();
+  const handleJoin = () => startFocusing();
 
-    return (
-        <div className="relative w-full h-screen bg-cover bg-center" style={{ backgroundImage: `url(${getBackgroundImage()})` }}>
-            <div className="absolute inset-0 bg-black bg-opacity-20" />
+  const handlePause = () => {
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
+        focusState: FocusState.Paused,
+        lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
+      });
+    }
+  };
 
-            {isStatsVisible ? (
-                <PowerCoupleStats
-                    character={character}
-                    stats={dailyStats}
-                    partnerStats={partnerDailyStats}
-                    onClose={() => setIsStatsVisible(false)}
-                />
-            ) : (
-                <div className="absolute top-4 left-4 z-20">
-                    <PixelButton onClick={() => setIsStatsVisible(true)} className="!p-3 text-3xl" aria-label="Open stats">
-                        🦋
-                    </PixelButton>
-                </div>
-            )}
+  const handleResume = async () => {
+    if (!userCharacter) return;
+    const userRef = database.ref(`users/${userCharacter}`);
+    const snapshot = await userRef.once('value');
+    const data = snapshot.val();
 
-            <SoundToggleButton isMuted={isMuted} onToggle={toggleMute} />
-            <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
-            
-            <Timer elapsedSeconds={elapsedSeconds} />
-            {partnerFocusState !== FocusState.Idle && (
-                <PartnerTimer elapsedSeconds={partnerElapsedSeconds} partnerName={partnerName} />
-            )}
+    if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
+        const pausedDuration = Date.now() - data.lastPauseStartTime;
+        const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
 
-            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex gap-4">
-                 {focusState === FocusState.Idle && <PixelButton onClick={handleStartFocus}>Start Focus</PixelButton>}
-                 {focusState === FocusState.Focusing && (
-                    <>
-                        <PixelButton onClick={handlePauseFocus}>Pause</PixelButton>
-                        <PixelButton onClick={handleStopFocus} variant="danger">Stop</PixelButton>
-                    </>
-                 )}
-                 {focusState === FocusState.Paused && (
-                    <>
-                        <PixelButton onClick={handleStartFocus}>Resume</PixelButton>
-                        <PixelButton onClick={handleStopFocus} variant="danger">Stop</PixelButton>
-                    </>
-                 )}
-            </div>
+        userRef.update({
+            focusState: FocusState.Focusing,
+            totalPausedTime: newTotalPausedTime,
+            lastPauseStartTime: null
+        });
+    }
+  };
 
-            {showRewardModal && (
-                <RewardModal 
-                    from={character}
-                    onSend={handleSendReward} 
-                    onSkip={handleRewardModalSkip} 
-                />
-            )}
-            
-            {rewards.map((reward, index) => (
-                <RewardNotification 
-                    key={index} 
-                    reward={reward} 
-                    onAcknowledge={() => handleAcknowledgeReward(reward)}
-                    onDismiss={() => handleDismissReward(reward)}
-                    onRespond={(response) => handleRespondToReward(response, reward)}
-                />
-            ))}
+  
+  const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
+      if (!userCharacter) return;
+      const fullReward: Reward = { ...reward, from: userCharacter };
+      database.ref(`users/${recipient}/lastRewardReceived`).set(fullReward)
+        .catch((error: Error) => {
+            console.error("Firebase write error:", error);
+            alert(`Failed to send reward: ${error.message}`);
+        });
+  }
 
-            {greetingMessage && <GreetingNotification message={greetingMessage} onDismiss={handleGreetingDismiss} />}
-        </div>
-    );
+  const handleSendRewardFromModal = (reward: Omit<Reward, 'from'>) => {
+    sendReward(partnerCharacter, reward);
+    setShowRewardModal(false);
+  };
+  
+  const handleRespondToReward = (reward: Omit<Reward, 'from'>) => {
+      if (!receivedReward) return;
+      sendReward(receivedReward.from, reward);
+      setReceivedReward(null);
+  }
+
+  const handleAcknowledgeReward = () => {
+    if (!receivedReward || !userCharacter) return;
+    sendReward(receivedReward.from, { type: RewardType.Heart });
+    setReceivedReward(null);
+  };
+
+  const handleSendHi = () => {
+    if (!userCharacter) return;
+    const message: GreetingMessage = { from: userCharacter, content: "hiiii", type: "GREETING" };
+    database.ref(`users/${partnerCharacter}/lastMessageReceived`).set(message);
+    setHiSent(true);
+  };
+
+  const handleReactToMessage = (rewardType: RewardType.Heart | RewardType.Kisses | RewardType.Hugs) => {
+    if (!receivedMessage || !userCharacter) return;
+    sendReward(receivedMessage.from, { type: rewardType });
+    setReceivedMessage(null);
+  };
+
+  const handleRespondToMessage = (reward: Omit<Reward, 'from'>) => {
+      if (!receivedMessage) return;
+      sendReward(receivedMessage.from, reward);
+      setReceivedMessage(null);
+  };
+
+  const handleToggleMute = () => {
+      setIsMuted(prev => !prev);
+  }
+
+  if (!userCharacter) {
+    return <OnboardingScreen onSelect={handleCharacterSelect} />;
+  }
+  
+  const isUserInSession = userFocus === FocusState.Focusing || userFocus === FocusState.Paused;
+  const isPartnerInSession = partnerFocus === FocusState.Focusing || partnerFocus === FocusState.Paused;
+
+  return (
+    <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
+      <audio ref={musicRef} src={AUDIO.BACKGROUND_MUSIC} loop />
+
+      {showOnlineNotification && <OnlinePresenceNotification 
+        partnerName={partnerCharacter} 
+        showSendHi={userFocus === FocusState.Focusing && !hiSent}
+        onSendHi={handleSendHi}
+      />}
+      {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
+      {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
+      {receivedReward && <RewardNotification 
+            reward={receivedReward} 
+            onDismiss={() => setReceivedReward(null)} 
+            onAcknowledge={handleAcknowledgeReward}
+            onRespond={handleRespondToReward} />}
+      {receivedMessage && <MessageNotification 
+            message={receivedMessage}
+            onDismiss={() => setReceivedMessage(null)}
+            onReact={handleReactToMessage}
+            onRespond={handleRespondToMessage}
+      />}
+      {showRewardModal && <RewardModal from={userCharacter} onSend={handleSendRewardFromModal} onSkip={() => setShowRewardModal(false)} />}
+
+      <MainDisplay
+        user={userCharacter}
+        partner={partnerCharacter}
+        userFocus={userFocus}
+        partnerFocus={partnerFocus}
+        onStart={handleStart}
+        onJoin={handleJoin}
+        onEnd={handleEnd}
+        onPause={handlePause}
+        onResume={handleResume}
+        isMuted={isMuted}
+        onToggleMute={handleToggleMute}
+        userElapsedSeconds={userElapsedSeconds}
+        partnerElapsedSeconds={partnerElapsedSeconds}
+        isUserInSession={isUserInSession}
+        isPartnerInSession={isPartnerInSession}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
+      
+      <PowerCoupleStats 
+        user={userCharacter}
+        partner={partnerCharacter}
+        userStats={{ today: userTodayTime, yesterday: userYesterdayTime }}
+        partnerStats={{ today: partnerTodayTime, yesterday: partnerYesterdayTime }}
+        jointTime={{ today: jointTodayTime, yesterday: jointYesterdayTime }}
+      />
+    </div>
+  );
 };
 
 export default App;
