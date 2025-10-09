@@ -87,7 +87,7 @@ const PartnerTimer: React.FC<{ elapsedSeconds: number; partnerName: string; }> =
 const SoundToggleButton: React.FC<{ isMuted: boolean; onToggle: () => void; }> = ({ isMuted, onToggle }) => (
     <button
         onClick={onToggle}
-        className="absolute top-4 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800"
+        className="absolute top-20 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800"
         aria-label={isMuted ? "Unmute" : "Mute"}
     >
         {isMuted ? '🔇' : '🔊'}
@@ -97,7 +97,7 @@ const SoundToggleButton: React.FC<{ isMuted: boolean; onToggle: () => void; }> =
 const FullscreenButton: React.FC<{ isFullscreen: boolean; onToggle: () => void; }> = ({ isFullscreen, onToggle }) => (
     <button
         onClick={onToggle}
-        className="absolute top-20 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800 md:hidden"
+        className="absolute top-36 left-4 z-20 bg-black bg-opacity-50 text-white text-3xl p-3 border-4 border-gray-800 md:hidden"
         aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
     >
         {isFullscreen ? '⤢' : '⤡'}
@@ -577,7 +577,8 @@ const PowerCoupleStats: React.FC<{
     character: Character;
     stats: Record<string, number>;
     partnerStats: Record<string, number>;
-}> = ({ character, stats, partnerStats }) => {
+    onClose: () => void;
+}> = ({ character, stats, partnerStats, onClose }) => {
     const today = getCycleDateString(Date.now());
     const yesterday = getCycleDateString(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -594,7 +595,14 @@ const PowerCoupleStats: React.FC<{
     const partnerName = CHARACTER_DATA[character].partner;
 
     return (
-        <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white text-xl p-4 border-4 border-gray-800 w-[90%] max-w-xs md:max-w-none md:w-auto">
+        <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white text-xl p-4 border-4 border-gray-800 w-[90%] max-w-xs md:max-w-none md:w-auto z-20">
+            <button 
+                onClick={onClose} 
+                className="absolute -top-3 -right-3 text-3xl bg-red-600 rounded-full w-8 h-8 flex items-center justify-center border-2 border-white text-white"
+                aria-label="Close stats"
+            >
+              &times;
+            </button>
             <h3 className="text-2xl text-center mb-2 minecraft-text">Power Couple Stats</h3>
             <div className="grid grid-cols-3 gap-x-4 gap-y-1">
                 <div />
@@ -641,6 +649,7 @@ const App: React.FC = () => {
     const [isMuted, setIsMuted] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [showRewardModal, setShowRewardModal] = useState(false);
+    const [isStatsVisible, setIsStatsVisible] = useState(false);
     
     // PARTNER STATE
     const [partnerFocusState, setPartnerFocusState] = useState<FocusState>(FocusState.Idle);
@@ -953,6 +962,21 @@ const App: React.FC = () => {
         <div className="relative w-full h-screen bg-cover bg-center" style={{ backgroundImage: `url(${getBackgroundImage()})` }}>
             <div className="absolute inset-0 bg-black bg-opacity-20" />
 
+            {isStatsVisible ? (
+                <PowerCoupleStats
+                    character={character}
+                    stats={dailyStats}
+                    partnerStats={partnerDailyStats}
+                    onClose={() => setIsStatsVisible(false)}
+                />
+            ) : (
+                <div className="absolute top-4 left-4 z-20">
+                    <PixelButton onClick={() => setIsStatsVisible(true)} className="!p-3 text-3xl" aria-label="Open stats">
+                        🦋
+                    </PixelButton>
+                </div>
+            )}
+
             <SoundToggleButton isMuted={isMuted} onToggle={toggleMute} />
             <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
             
@@ -976,8 +1000,6 @@ const App: React.FC = () => {
                     </>
                  )}
             </div>
-
-            <PowerCoupleStats character={character} stats={dailyStats} partnerStats={partnerDailyStats} />
 
             {showRewardModal && (
                 <RewardModal 
