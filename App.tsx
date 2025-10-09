@@ -23,9 +23,9 @@ function usePrevious<T>(value: T): T | undefined {
 // --- HELPERS & UI COMPONENTS ---
 
 const getCycleDateString = (timestamp: number): string => {
-    const date = new Date(timestamp);
-    // The cycle starts at 1 AM UTC. So subtract 1 hour to align the date.
-    date.setUTCHours(date.getUTCHours() - 1); 
+    // Subtract 5 hours to make the day roll over at 5 AM UTC
+    const adjustedTimestamp = timestamp - (5 * 60 * 60 * 1000);
+    const date = new Date(adjustedTimestamp);
     const year = date.getUTCFullYear();
     const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
     const day = date.getUTCDate().toString().padStart(2, '0');
