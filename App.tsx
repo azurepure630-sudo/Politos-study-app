@@ -46,49 +46,24 @@ const PixelButton: React.FC<{ onClick: () => void; children: React.ReactNode; cl
   );
 };
 
-const Timer: React.FC<{ startTime: number }> = ({ startTime }) => {
-    const [seconds, setSeconds] = useState(0);
-
-    useEffect(() => {
-        const updateTimer = () => {
-            const now = Date.now();
-            const elapsed = Math.floor((now - startTime) / 1000);
-            setSeconds(elapsed > 0 ? elapsed : 0);
-        };
-        updateTimer();
-        const interval = setInterval(updateTimer, 1000);
-        return () => clearInterval(interval);
-    }, [startTime]);
-
+const Timer: React.FC<{ elapsedSeconds: number }> = ({ elapsedSeconds }) => {
     const formatTime = () => {
-        const hours = Math.floor(seconds / 3600).toString().padStart(2, '0');
-        const mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-        const secs = (seconds % 60).toString().padStart(2, '0');
+        const totalSeconds = elapsedSeconds > 0 ? elapsedSeconds : 0;
+        const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const mins = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const secs = (totalSeconds % 60).toString().padStart(2, '0');
         return `${hours}:${mins}:${secs}`;
     };
 
     return <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white text-3xl p-4 border-4 border-gray-800">{formatTime()}</div>;
 };
 
-const PartnerTimer: React.FC<{ startTime: number; partnerName: string; }> = ({ startTime, partnerName }) => {
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-    useEffect(() => {
-        const updateTimer = () => {
-            const now = Date.now();
-            const elapsed = Math.floor((now - startTime) / 1000);
-            setElapsedSeconds(elapsed > 0 ? elapsed : 0);
-        };
-
-        updateTimer();
-        const interval = setInterval(updateTimer, 1000);
-        return () => clearInterval(interval);
-    }, [startTime]);
-
+const PartnerTimer: React.FC<{ elapsedSeconds: number; partnerName: string; }> = ({ elapsedSeconds, partnerName }) => {
     const formatTime = () => {
-        const hours = Math.floor(elapsedSeconds / 3600).toString().padStart(2, '0');
-        const mins = Math.floor((elapsedSeconds % 3600) / 60).toString().padStart(2, '0');
-        const secs = (elapsedSeconds % 60).toString().padStart(2, '0');
+        const totalSeconds = elapsedSeconds > 0 ? elapsedSeconds : 0;
+        const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const mins = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const secs = (totalSeconds % 60).toString().padStart(2, '0');
         return `${hours}:${mins}:${secs}`;
     };
 
@@ -750,47 +725,92 @@ const PowerCoupleStats: React.FC<{
 
 
 const MainDisplay: React.FC<{
-    user: Character,
-    partner: Character,
-    userFocus: FocusState,
-    partnerFocus: FocusState,
-    onStart: () => void,
-    onJoin: () => void,
-    onEnd: () => void,
-    isMuted: boolean,
-    onToggleMute: () => void,
-    userFocusStartTime: number | null,
-    partnerStartTime: number | null,
-    isFullscreen: boolean,
-    onToggleFullscreen: () => void,
-}> = ({ user, partner, userFocus, partnerFocus, onStart, onJoin, onEnd, isMuted, onToggleMute, userFocusStartTime, partnerStartTime, isFullscreen, onToggleFullscreen }) => {
-
+    user: Character;
+    partner: Character;
+    userFocus: FocusState;
+    partnerFocus: FocusState;
+    onStart: () => void;
+    onJoin: () => void;
+    onEnd: () => void;
+    onPause: () => void;
+    onResume: () => void;
+    isMuted: boolean;
+    onToggleMute: () => void;
+    userElapsedSeconds: number;
+    partnerElapsedSeconds: number;
+    isUserInSession: boolean;
+    isPartnerInSession: boolean;
+    isFullscreen: boolean;
+    onToggleFullscreen: () => void;
+}> = ({
+    user, partner, userFocus, partnerFocus, onStart, onJoin, onEnd, onPause, onResume,
+    isMuted, onToggleMute, userElapsedSeconds, partnerElapsedSeconds,
+    isUserInSession, isPartnerInSession, isFullscreen, onToggleFullscreen
+}) => {
     let imageSrc = IMAGES.IDLE;
     let text = "Ready for today, Politos?";
-    let controls = <PixelButton onClick={onStart}>START "STUDY"</PixelButton>;
+    let controls: React.ReactNode = null;
 
     const isUserFocusing = userFocus === FocusState.Focusing;
     const isPartnerFocusing = partnerFocus === FocusState.Focusing;
+    const isUserPaused = userFocus === FocusState.Paused;
+    const isPartnerPaused = partnerFocus === FocusState.Paused;
+    const isUserIdle = userFocus === FocusState.Idle;
+    const isPartnerIdle = partnerFocus === FocusState.Idle;
+
     const isAnyoneFocusing = isUserFocusing || isPartnerFocusing;
 
-    if (!isUserFocusing && !isPartnerFocusing) { // State A: Idle
-        imageSrc = IMAGES.IDLE;
-        text = "Ready for today, Politos?";
-        controls = <PixelButton onClick={onStart}>START "STUDY"</PixelButton>;
-    } else if (!isUserFocusing && isPartnerFocusing) { // State B: Partner Focusing
-        imageSrc = user === Character.Flynn ? IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE : IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
-        text = `Your polito is focussing.`;
-        controls = <PixelButton onClick={onJoin}>JOIN THEIR SESSION</PixelButton>;
-    } else if (isUserFocusing && !isPartnerFocusing) { // State C: I am Focusing
-        imageSrc = user === Character.Flynn ? IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE : IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE;
-        text = "Focus time. Your polito will join you.";
-        controls = <PixelButton onClick={onEnd} variant="danger">END SESSION</PixelButton>;
-    } else if (isUserFocusing && isPartnerFocusing) { // State D: Joint Session
-        imageSrc = IMAGES.JOINT_FOCUS;
-        text = "We politos are focussing.";
-        controls = <PixelButton onClick={onEnd} variant="danger">END SESSION</PixelButton>;
+    // Determine controls, text, and image based on state matrix
+    if (isUserFocusing) {
+        controls = (
+            <div className="flex gap-4 justify-center">
+                <PixelButton onClick={onPause}>PAUSE</PixelButton>
+                <PixelButton onClick={onEnd} variant="danger">END SESSION</PixelButton>
+            </div>
+        );
+        if (isPartnerFocusing) {
+            imageSrc = IMAGES.JOINT_FOCUS;
+            text = "We politos are focussing.";
+        } else if (isPartnerPaused) {
+            imageSrc = user === Character.Flynn ? IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE : IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE;
+            text = "Focus time. Your polito is resting and will be right back";
+        } else { // Partner is idle
+            imageSrc = user === Character.Flynn ? IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE : IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE;
+            text = "Focus time. Your polito will join you.";
+        }
+    } else if (isUserPaused) {
+        controls = (
+            <div className="flex gap-4 justify-center">
+                <PixelButton onClick={onResume}>RESUME</PixelButton>
+                <PixelButton onClick={onEnd} variant="danger">END SESSION</PixelButton>
+            </div>
+        );
+        if (isPartnerFocusing) {
+            imageSrc = user === Character.Flynn ? IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE : IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
+            text = "Lil rests go a long way, but do return to your polito.";
+        } else if (isPartnerPaused) {
+            imageSrc = IMAGES.IDLE;
+            text = "Rest politos, lil rests go a long way";
+        } else { // Partner is idle
+            imageSrc = IMAGES.IDLE;
+            text = "You are on a break.";
+        }
+    } else if (isUserIdle) {
+        if (isPartnerFocusing) {
+            imageSrc = user === Character.Flynn ? IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE : IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
+            text = "Your polito is focussing.";
+            controls = <PixelButton onClick={onJoin}>JOIN THEIR SESSION</PixelButton>;
+        } else if (isPartnerPaused) {
+            imageSrc = user === Character.Flynn ? IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE : IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE;
+            text = "Your polito is on a well deserved rest.";
+            controls = <PixelButton onClick={onJoin}>JOIN THEIR SESSION</PixelButton>;
+        } else { // Partner is idle
+            imageSrc = IMAGES.IDLE;
+            text = "Ready for today, Politos?";
+            controls = <PixelButton onClick={onStart}>START "STUDY"</PixelButton>;
+        }
     }
-    
+
     const partnerDisplayName = partner === Character.Rapunzel ? 'Faryal 💛' : 'Asad 💛';
     
     return (
@@ -801,7 +821,7 @@ const MainDisplay: React.FC<{
                 <SoundToggleButton isMuted={isMuted} onToggle={onToggleMute} />
                 <FullscreenButton isFullscreen={isFullscreen} onToggle={onToggleFullscreen} />
                 
-                {!isAnyoneFocusing && (
+                {isUserIdle && isPartnerIdle && (
                   <>
                     <div key="heart1" className="absolute top-[48%] left-[51%] text-3xl animate-float-up" style={{ animationDelay: '0s' }}>❤️</div>
                     <div key="heart2" className="absolute top-[50%] left-[49%] text-3xl animate-float-up" style={{ animationDelay: '0.8s' }}>❤️</div>
@@ -826,8 +846,8 @@ const MainDisplay: React.FC<{
                     </div>
                 )}
             
-                {isUserFocusing && userFocusStartTime && <Timer startTime={userFocusStartTime} />}
-                {isUserFocusing && isPartnerFocusing && partnerStartTime && <PartnerTimer startTime={partnerStartTime} partnerName={partnerDisplayName} />}
+                {isUserInSession && <Timer elapsedSeconds={userElapsedSeconds} />}
+                {isUserInSession && isPartnerInSession && <PartnerTimer elapsedSeconds={partnerElapsedSeconds} partnerName={partnerDisplayName} />}
             
                 <div className="absolute bottom-0 w-full z-10 flex flex-col items-center p-8 pb-12 gap-6">
                     <h2 className="text-4xl md:text-5xl text-white minecraft-text text-center px-4 py-2 bg-black bg-opacity-40">{text}</h2>
@@ -844,8 +864,12 @@ const App: React.FC = () => {
   const [userCharacter, setUserCharacter] = useState<Character | null>(null);
   const [userFocus, setUserFocus] = useState<FocusState>(FocusState.Idle);
   const [userFocusStartTime, setUserFocusStartTime] = useState<number | null>(null);
+  const [userTotalPausedTime, setUserTotalPausedTime] = useState<number | null>(null);
+  const [userLastPauseStartTime, setUserLastPauseStartTime] = useState<number | null>(null);
   const [partnerFocus, setPartnerFocus] = useState<FocusState>(FocusState.Idle);
   const [partnerFocusStartTime, setPartnerFocusStartTime] = useState<number | null>(null);
+  const [partnerTotalPausedTime, setPartnerTotalPausedTime] = useState<number | null>(null);
+  const [partnerLastPauseStartTime, setPartnerLastPauseStartTime] = useState<number | null>(null);
   const [userStats, setUserStats] = useState({ totalFocusTime: 0 });
   const [partnerStats, setPartnerStats] = useState({ totalFocusTime: 0 });
   const [jointTime, setJointTime] = useState(0);
@@ -859,6 +883,9 @@ const App: React.FC = () => {
   const [hiSent, setHiSent] = useState(false);
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [userElapsedSeconds, setUserElapsedSeconds] = useState(0);
+  const [partnerElapsedSeconds, setPartnerElapsedSeconds] = useState(0);
+
 
   const musicRef = useRef<HTMLAudioElement>(null);
   const prevPartnerFocus = usePrevious(partnerFocus);
@@ -880,9 +907,16 @@ const App: React.FC = () => {
     const userData = allUsersData[userCharacter];
     const partnerData = allUsersData[partnerCharacter];
 
-    if (userData.focusState !== FocusState.Focusing || !userData.focusStartTime) {
+    if ((userData.focusState !== FocusState.Focusing && userData.focusState !== FocusState.Paused) || !userData.focusStartTime) {
         return; 
     }
+    
+    let finalTotalPausedTime = userData.totalPausedTime || 0;
+    if (userData.focusState === FocusState.Paused && userData.lastPauseStartTime) {
+        finalTotalPausedTime += (now - userData.lastPauseStartTime);
+    }
+    const sessionDurationMs = (now - userData.focusStartTime) - finalTotalPausedTime;
+    const sessionDurationSec = sessionDurationMs > 0 ? sessionDurationMs / 1000 : 0;
 
     const nowInUTC = new Date(now);
     const cycleStartUTC = new Date(Date.UTC(nowInUTC.getUTCFullYear(), nowInUTC.getUTCMonth(), nowInUTC.getUTCDate()));
@@ -893,7 +927,6 @@ const App: React.FC = () => {
     const cycleStartTimestamp = cycleStartUTC.getTime();
 
     const updates: { [key: string]: any } = {};
-    const sessionDurationSec = (now - userData.focusStartTime) / 1000;
 
     const userLastUpdated = userData.statsLastUpdated || 0;
     const userStatsNeedReset = userLastUpdated < cycleStartTimestamp;
@@ -902,9 +935,21 @@ const App: React.FC = () => {
     updates[`/users/${userCharacter}/totalFocusTime`] = newUserTotalFocusTime;
     updates[`/users/${userCharacter}/statsLastUpdated`] = now;
 
-    if (partnerData.focusState === FocusState.Focusing && partnerData.focusStartTime) {
+    if ((partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
         const jointStartTime = Math.max(userData.focusStartTime, partnerData.focusStartTime);
-        const jointDurationSec = (now - jointStartTime) / 1000;
+        
+        let partnerFinalTotalPaused = partnerData.totalPausedTime || 0;
+        if (partnerData.focusState === FocusState.Paused && partnerData.lastPauseStartTime) {
+            partnerFinalTotalPaused += (now - partnerData.lastPauseStartTime);
+        }
+        
+        const userEffectiveTime = userData.focusStartTime + finalTotalPausedTime;
+        const partnerEffectiveTime = partnerData.focusStartTime + partnerFinalTotalPaused;
+
+        const effectiveJointStartTime = Math.max(userEffectiveTime, partnerEffectiveTime);
+        const jointDurationMs = now - effectiveJointStartTime;
+        const jointDurationSec = jointDurationMs > 0 ? jointDurationMs / 1000 : 0;
+
 
         if (jointDurationSec > 0) {
             const jointLastUpdated = jointData.lastUpdated || 0;
@@ -918,6 +963,8 @@ const App: React.FC = () => {
     
     updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
     updates[`/users/${userCharacter}/focusStartTime`] = null;
+    updates[`/users/${userCharacter}/totalPausedTime`] = null;
+    updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
 
     await database.ref().update(updates);
 
@@ -987,7 +1034,7 @@ const App: React.FC = () => {
     // Check for dangling session on load
     userStatusRef.once('value', (snapshot: any) => {
         const data = snapshot.val();
-        if (data && data.focusState === FocusState.Focusing && data.focusStartTime) {
+        if (data && (data.focusState === FocusState.Focusing || data.focusState === FocusState.Paused) && data.focusStartTime) {
             console.log("Dangling focus session detected. Ending it now.");
             handleEnd();
         }
@@ -1016,6 +1063,8 @@ const App: React.FC = () => {
             isOnline: false,
             focusState: FocusState.Idle,
             focusStartTime: null,
+            totalPausedTime: null,
+            lastPauseStartTime: null,
         }).then(() => {
             userStatusRef.update({ isOnline: true });
         });
@@ -1026,6 +1075,8 @@ const App: React.FC = () => {
         if (data) {
             setUserFocus(data.focusState || FocusState.Idle);
             setUserFocusStartTime(data.focusStartTime || null);
+            setUserTotalPausedTime(data.totalPausedTime || null);
+            setUserLastPauseStartTime(data.lastPauseStartTime || null);
             const lastUpdated = data.statsLastUpdated || 0;
             const statsNeedReset = lastUpdated < cycleStartTimestamp;
             setUserStats({
@@ -1043,10 +1094,14 @@ const App: React.FC = () => {
         if (!partnerIsCurrentlyOnline) {
             setPartnerFocus(FocusState.Idle);
             setPartnerFocusStartTime(null);
+            setPartnerTotalPausedTime(null);
+            setPartnerLastPauseStartTime(null);
             setPartnerStats({ totalFocusTime: 0 });
         } else {
             setPartnerFocus(data.focusState || FocusState.Idle);
             setPartnerFocusStartTime(data.focusStartTime || null);
+            setPartnerTotalPausedTime(data.totalPausedTime || null);
+            setPartnerLastPauseStartTime(data.lastPauseStartTime || null);
             const lastUpdated = data.statsLastUpdated || 0;
             const statsNeedReset = lastUpdated < cycleStartTimestamp;
             setPartnerStats({
@@ -1096,9 +1151,45 @@ const App: React.FC = () => {
     };
   }, [userCharacter, partnerCharacter, handleEnd]);
   
+  // --- TIMER CALCULATION LOGIC ---
+  useEffect(() => {
+    const calculateElapsed = (
+      focus: FocusState, 
+      startTime: number | null, 
+      totalPaused: number | null, 
+      lastPauseStart: number | null
+    ) => {
+      if (!startTime) return 0;
+      const now = Date.now();
+      let currentTotalPaused = totalPaused || 0;
+      if (focus === FocusState.Paused && lastPauseStart) {
+        currentTotalPaused += now - lastPauseStart;
+      }
+      const elapsed = now - startTime - currentTotalPaused;
+      return Math.floor(elapsed / 1000);
+    };
+
+    const userTimerShouldRun = userFocus === FocusState.Focusing;
+    const partnerTimerShouldRun = partnerFocus === FocusState.Focusing;
+
+    const interval = setInterval(() => {
+      const userSeconds = calculateElapsed(userFocus, userFocusStartTime, userTotalPausedTime, userLastPauseStartTime);
+      setUserElapsedSeconds(userSeconds > 0 ? userSeconds : 0);
+      
+      const partnerSeconds = calculateElapsed(partnerFocus, partnerFocusStartTime, partnerTotalPausedTime, partnerLastPauseStartTime);
+      setPartnerElapsedSeconds(partnerSeconds > 0 ? partnerSeconds : 0);
+    }, 1000);
+
+    return () => clearInterval(interval);
+
+  }, [
+    userFocus, userFocusStartTime, userTotalPausedTime, userLastPauseStartTime,
+    partnerFocus, partnerFocusStartTime, partnerTotalPausedTime, partnerLastPauseStartTime
+  ]);
+
   // --- JOIN NOTIFICATION LOGIC ---
   useEffect(() => {
-      if (userFocus === FocusState.Focusing && partnerFocus === FocusState.Focusing && prevPartnerFocus === FocusState.Idle) {
+      if (userFocus === FocusState.Focusing && partnerFocus === FocusState.Focusing && prevPartnerFocus !== FocusState.Focusing) {
           setShowJoinNotification(true);
           setTimeout(() => {
               setShowJoinNotification(false);
@@ -1117,16 +1208,6 @@ const App: React.FC = () => {
           setHiSent(false); // Reset hi sent status when partner joins or goes offline
       }
   }, [isPartnerOnline, prevIsPartnerOnline, partnerFocus, prevPartnerFocus]);
-  
-  const updateUserFocusState = (newState: FocusState) => {
-    if (userCharacter) {
-        const focusData = {
-            focusState: newState,
-            focusStartTime: newState === FocusState.Focusing ? firebase.database.ServerValue.TIMESTAMP : null
-        };
-        database.ref(`users/${userCharacter}`).update(focusData);
-    }
-  };
   
   const handleCharacterSelect = (character: Character) => {
     try {
@@ -1147,15 +1228,48 @@ const App: React.FC = () => {
     setUserCharacter(character);
     setIsMuted(false); 
   };
-
-  const handleStart = () => {
-    updateUserFocusState(FocusState.Focusing);
+  
+  const startFocusing = () => {
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
+        focusState: FocusState.Focusing,
+        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
+        totalPausedTime: 0,
+        lastPauseStartTime: null,
+      });
+    }
   };
 
-  const handleJoin = () => {
-    updateUserFocusState(FocusState.Focusing);
-    setSessionType(SessionType.Joint);
+  const handleStart = () => startFocusing();
+  const handleJoin = () => startFocusing();
+
+  const handlePause = () => {
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
+        focusState: FocusState.Paused,
+        lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
+      });
+    }
   };
+
+  const handleResume = async () => {
+    if (!userCharacter) return;
+    const userRef = database.ref(`users/${userCharacter}`);
+    const snapshot = await userRef.once('value');
+    const data = snapshot.val();
+
+    if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
+        const pausedDuration = Date.now() - data.lastPauseStartTime;
+        const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
+
+        userRef.update({
+            focusState: FocusState.Focusing,
+            totalPausedTime: newTotalPausedTime,
+            lastPauseStartTime: null
+        });
+    }
+  };
+
   
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
       if (!userCharacter) return;
@@ -1210,6 +1324,9 @@ const App: React.FC = () => {
   if (!userCharacter) {
     return <OnboardingScreen onSelect={handleCharacterSelect} />;
   }
+  
+  const isUserInSession = userFocus === FocusState.Focusing || userFocus === FocusState.Paused;
+  const isPartnerInSession = partnerFocus === FocusState.Focusing || partnerFocus === FocusState.Paused;
 
   return (
     <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
@@ -1242,10 +1359,14 @@ const App: React.FC = () => {
         onStart={handleStart}
         onJoin={handleJoin}
         onEnd={handleEnd}
+        onPause={handlePause}
+        onResume={handleResume}
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
-        userFocusStartTime={userFocusStartTime}
-        partnerStartTime={partnerFocusStartTime}
+        userElapsedSeconds={userElapsedSeconds}
+        partnerElapsedSeconds={partnerElapsedSeconds}
+        isUserInSession={isUserInSession}
+        isPartnerInSession={isPartnerInSession}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
       />

@@ -7,6 +7,7 @@ export enum Character {
 export enum FocusState {
   Idle = 'IDLE',
   Focusing = 'FOCUSING',
+  Paused = 'PAUSED',
 }
 
 export enum SessionType {
