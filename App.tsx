@@ -722,9 +722,9 @@ const PowerCoupleStats: React.FC<{
     userStats: { today: number; yesterday: number };
     partnerStats: { today: number; yesterday: number };
     jointTime: { today: number; yesterday: number };
-}> = ({ user, partner, userStats, partnerStats, jointTime }) => {
-    const [isOpen, setIsOpen] = useState(false);
-
+    isOpen: boolean;
+    onToggle: () => void;
+}> = ({ user, partner, userStats, partnerStats, jointTime, isOpen, onToggle }) => {
     const formatTime = (totalSeconds: number) => {
         const seconds = Math.floor(totalSeconds);
         const hours = Math.floor(seconds / 3600);
@@ -734,7 +734,7 @@ const PowerCoupleStats: React.FC<{
 
     return (
         <div className="absolute top-36 md:top-20 left-4 z-20">
-            <PixelButton onClick={() => setIsOpen(!isOpen)} className="!py-2 !px-4 !text-xl">
+            <PixelButton onClick={onToggle} className="!py-2 !px-4 !text-xl">
                 Power couple stats 🦋
             </PixelButton>
             {isOpen && (
@@ -931,6 +931,7 @@ const App: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [userElapsedSeconds, setUserElapsedSeconds] = useState(0);
   const [partnerElapsedSeconds, setPartnerElapsedSeconds] = useState(0);
+  const [showStats, setShowStats] = useState(false);
 
 
   const musicRef = useRef<HTMLAudioElement>(null);
@@ -1332,6 +1333,10 @@ const App: React.FC = () => {
         silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
     }
   }, [userCharacter]);
+
+  const handleToggleStats = useCallback(() => {
+      setShowStats(prev => !prev);
+  }, []);
   
   // --- KEYBOARD SHORTCUTS ---
   useEffect(() => {
@@ -1364,6 +1369,12 @@ const App: React.FC = () => {
                     handleEnd();
                 }
                 break;
+            case 'KeyS':
+                handleToggleStats();
+                break;
+            case 'KeyF':
+                toggleFullscreen();
+                break;
             default:
                 break;
         }
@@ -1374,7 +1385,7 @@ const App: React.FC = () => {
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [userFocus, partnerFocus, isFullscreen, handleStart, handleJoin, handlePause, handleResume, handleEnd, handleToggleMute]);
+  }, [userFocus, partnerFocus, isFullscreen, handleStart, handleJoin, handlePause, handleResume, handleEnd, handleToggleMute, handleToggleStats, toggleFullscreen]);
 
 
   const handleCharacterSelect = (character: Character) => {
@@ -1510,6 +1521,8 @@ const App: React.FC = () => {
         userStats={{ today: userTodayTime, yesterday: userYesterdayTime }}
         partnerStats={{ today: partnerTodayTime, yesterday: partnerYesterdayTime }}
         jointTime={{ today: jointTodayTime, yesterday: jointYesterdayTime }}
+        isOpen={showStats}
+        onToggle={handleToggleStats}
       />
     </div>
   );
