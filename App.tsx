@@ -1284,6 +1284,98 @@ const App: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [isPartnerOnline, prevIsPartnerOnline]);
+  
+  const handleToggleMute = useCallback(() => {
+      setIsMuted(prev => !prev);
+  }, []);
+
+  const startFocusing = useCallback(() => {
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
+        focusState: FocusState.Focusing,
+        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
+        totalPausedTime: 0,
+        lastPauseStartTime: null,
+      });
+      silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
+    }
+  }, [userCharacter]);
+
+  const handleStart = useCallback(() => startFocusing(), [startFocusing]);
+  const handleJoin = useCallback(() => startFocusing(), [startFocusing]);
+
+  const handlePause = useCallback(() => {
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
+        focusState: FocusState.Paused,
+        lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
+      });
+      silentAudioRef.current?.pause();
+    }
+  }, [userCharacter]);
+
+  const handleResume = useCallback(async () => {
+    if (!userCharacter) return;
+    const userRef = database.ref(`users/${userCharacter}`);
+    const snapshot = await userRef.once('value');
+    const data = snapshot.val();
+
+    if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
+        const pausedDuration = Date.now() - data.lastPauseStartTime;
+        const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
+
+        await userRef.update({
+            focusState: FocusState.Focusing,
+            totalPausedTime: newTotalPausedTime,
+            lastPauseStartTime: null
+        });
+        silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
+    }
+  }, [userCharacter]);
+  
+  // --- KEYBOARD SHORTCUTS ---
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+        // Do not trigger shortcuts if focus is on an input/textarea
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            return;
+        }
+
+        switch (event.code) {
+            case 'Space':
+                event.preventDefault(); // Prevent page scroll
+                if (userFocus === FocusState.Idle) {
+                    if (partnerFocus === FocusState.Focusing || partnerFocus === FocusState.Paused) {
+                        handleJoin();
+                    } else {
+                        handleStart();
+                    }
+                } else if (userFocus === FocusState.Focusing) {
+                    handlePause();
+                } else if (userFocus === FocusState.Paused) {
+                    handleResume();
+                }
+                break;
+            case 'KeyM':
+                handleToggleMute();
+                break;
+            case 'Escape':
+                if (!isFullscreen && (userFocus === FocusState.Focusing || userFocus === FocusState.Paused)) {
+                    handleEnd();
+                }
+                break;
+            default:
+                break;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [userFocus, partnerFocus, isFullscreen, handleStart, handleJoin, handlePause, handleResume, handleEnd, handleToggleMute]);
+
 
   const handleCharacterSelect = (character: Character) => {
     try {
@@ -1304,52 +1396,7 @@ const App: React.FC = () => {
     setUserCharacter(character);
     setIsMuted(false); 
   };
-  
-  const startFocusing = () => {
-    if (userCharacter) {
-      database.ref(`users/${userCharacter}`).update({
-        focusState: FocusState.Focusing,
-        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
-        totalPausedTime: 0,
-        lastPauseStartTime: null,
-      });
-      silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
-    }
-  };
 
-  const handleStart = () => startFocusing();
-  const handleJoin = () => startFocusing();
-
-  const handlePause = () => {
-    if (userCharacter) {
-      database.ref(`users/${userCharacter}`).update({
-        focusState: FocusState.Paused,
-        lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
-      });
-      silentAudioRef.current?.pause();
-    }
-  };
-
-  const handleResume = async () => {
-    if (!userCharacter) return;
-    const userRef = database.ref(`users/${userCharacter}`);
-    const snapshot = await userRef.once('value');
-    const data = snapshot.val();
-
-    if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
-        const pausedDuration = Date.now() - data.lastPauseStartTime;
-        const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
-
-        await userRef.update({
-            focusState: FocusState.Focusing,
-            totalPausedTime: newTotalPausedTime,
-            lastPauseStartTime: null
-        });
-        silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
-    }
-  };
-
-  
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
       if (!userCharacter) return;
       const fullReward: Reward = { ...reward, from: userCharacter };
@@ -1396,10 +1443,6 @@ const App: React.FC = () => {
       setReceivedMessage(null);
   };
 
-  const handleToggleMute = () => {
-      setIsMuted(prev => !prev);
-  }
-  
   const handleCloseOnlineNotification = () => {
       if (onlineNotificationTimerRef.current) {
           clearTimeout(onlineNotificationTimerRef.current);
