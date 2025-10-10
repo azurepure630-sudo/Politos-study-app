@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Character, FocusState, SessionType, RewardType, Reward, GreetingMessage } from './types';
 import { IMAGES, CHARACTER_DATA, AUDIO, firebaseConfig } from './constants';
@@ -935,6 +936,7 @@ const App: React.FC = () => {
   const musicRef = useRef<HTMLAudioElement>(null);
   const silentAudioRef = useRef<HTMLAudioElement>(null);
   const onlineNotificationTimerRef = useRef<number | null>(null);
+  const desiredOrientationRef = useRef<string | null>(null);
   const prevPartnerFocus = usePrevious(partnerFocus);
   const prevIsPartnerOnline = usePrevious(isPartnerOnline);
 
@@ -1003,7 +1005,7 @@ const App: React.FC = () => {
   }, [userCharacter, partnerCharacter]);
   
     // --- FULLSCREEN HANDLING ---
-    const toggleFullscreen = async () => {
+    const toggleFullscreen = useCallback(async () => {
         const doc = document as any;
         const docEl = document.documentElement as any;
 
@@ -1014,38 +1016,55 @@ const App: React.FC = () => {
         try {
             if (!fullscreenElement) {
                 if (requestFullscreen) {
-                    // Capture orientation based on viewport dimensions BEFORE fullscreen is requested.
+                    // Determine and store the desired orientation BEFORE requesting fullscreen.
                     const isPortrait = window.innerHeight > window.innerWidth;
-                    
+                    desiredOrientationRef.current = isPortrait ? 'portrait' : 'landscape';
                     await requestFullscreen.call(docEl);
-
-                    // Once in fullscreen, attempt to lock the orientation.
-                    if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
-                        // Use the captured orientation. This is more reliable than screen.orientation.type,
-                        // which might change during the transition.
-                        const lockType = isPortrait ? 'portrait' : 'landscape';
-                        await (screen.orientation as any).lock(lockType);
-                    }
                 }
             } else {
                 if (exitFullscreen) {
-                    // When exiting, always unlock orientation to restore default behavior.
-                    if (screen.orientation && typeof (screen.orientation as any).unlock === 'function') {
-                        (screen.orientation as any).unlock();
-                    }
                     await exitFullscreen.call(doc);
                 }
             }
         } catch (err: any) {
-            console.error(`Error with fullscreen or orientation lock: ${err.message} (${err.name})`);
+            console.error(`Error with fullscreen request/exit: ${err.message} (${err.name})`);
+            // Clear desired orientation on error to prevent inconsistent state
+            desiredOrientationRef.current = null;
         }
-    };
+    }, []);
 
     useEffect(() => {
-        const onFullscreenChange = () => {
+        const onFullscreenChange = async () => {
             const doc = document as any;
             const fullscreenElement = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+            
             setIsFullscreen(!!fullscreenElement);
+
+            if (fullscreenElement) {
+                // We have ENTERED fullscreen. Now, try to lock orientation.
+                if (desiredOrientationRef.current) {
+                    try {
+                        if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
+                            // FIX: The type `OrientationLockType` is not available in all TypeScript DOM library versions.
+                            // The type assertion has been removed as `desiredOrientationRef.current` already holds a valid string 
+                            // ('portrait' or 'landscape') for the `lock` method.
+                            await (screen.orientation as any).lock(desiredOrientationRef.current);
+                        }
+                    } catch (err) {
+                        console.error('Could not lock orientation:', err);
+                    }
+                }
+            } else {
+                // We have EXITED fullscreen. Unlock orientation and clear our ref.
+                try {
+                    if (screen.orientation && typeof (screen.orientation as any).unlock === 'function') {
+                        (screen.orientation as any).unlock();
+                    }
+                } catch (err) {
+                    console.error('Could not unlock orientation:', err);
+                }
+                desiredOrientationRef.current = null;
+            }
         };
 
         document.addEventListener('fullscreenchange', onFullscreenChange);
