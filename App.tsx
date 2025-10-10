@@ -1011,42 +1011,33 @@ const App: React.FC = () => {
         const exitFullscreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
         const fullscreenElement = doc.fullscreenElement || doc.mozFullScreenElement || doc.webkitFullscreenElement || doc.msFullscreenElement;
 
-        if (!fullscreenElement) {
-            if (requestFullscreen) {
-                try {
+        try {
+            if (!fullscreenElement) {
+                if (requestFullscreen) {
+                    // Capture orientation based on viewport dimensions BEFORE fullscreen is requested.
+                    const isPortrait = window.innerHeight > window.innerWidth;
+                    
                     await requestFullscreen.call(docEl);
+
+                    // Once in fullscreen, attempt to lock the orientation.
                     if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
-                        try {
-                            // To improve reliability on mobile, lock to a general orientation ('portrait' or 'landscape')
-                            // instead of the more specific type (e.g., 'portrait-primary').
-                            const currentOrientation = screen.orientation.type;
-                            let lockType: 'portrait' | 'landscape' | string = currentOrientation;
-                            if (currentOrientation.startsWith('portrait')) {
-                                lockType = 'portrait';
-                            } else if (currentOrientation.startsWith('landscape')) {
-                                lockType = 'landscape';
-                            }
-                            await (screen.orientation as any).lock(lockType);
-                        } catch (e) {
-                            console.warn("Could not lock screen orientation:", e);
-                        }
+                        // Use the captured orientation. This is more reliable than screen.orientation.type,
+                        // which might change during the transition.
+                        const lockType = isPortrait ? 'portrait' : 'landscape';
+                        await (screen.orientation as any).lock(lockType);
                     }
-                } catch (err: any) {
-                    console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
                 }
-            }
-        } else {
-            if (exitFullscreen) {
-                if (screen.orientation && typeof (screen.orientation as any).unlock === 'function') {
-                    (screen.orientation as any).unlock();
-                }
-                
-                try {
+            } else {
+                if (exitFullscreen) {
+                    // When exiting, always unlock orientation to restore default behavior.
+                    if (screen.orientation && typeof (screen.orientation as any).unlock === 'function') {
+                        (screen.orientation as any).unlock();
+                    }
                     await exitFullscreen.call(doc);
-                } catch (err: any) {
-                    console.error(`Error attempting to exit full-screen mode: ${err.message} (${err.name})`);
                 }
             }
+        } catch (err: any) {
+            console.error(`Error with fullscreen or orientation lock: ${err.message} (${err.name})`);
         }
     };
 
