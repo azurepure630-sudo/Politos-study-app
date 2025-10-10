@@ -594,8 +594,16 @@ const OnlinePresenceNotification: React.FC<{
     partnerName: string;
     showSendHi: boolean;
     onSendHi: () => void;
-}> = ({ partnerName, showSendHi, onSendHi }) => (
+    onClose: () => void;
+}> = ({ partnerName, showSendHi, onSendHi, onClose }) => (
     <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-xl px-4 py-2 border-4 border-green-800 shadow-[6px_6px_0px_#383838] flex flex-col items-center gap-2 animate-fade-in-out">
+        <button
+            onClick={onClose}
+            className="absolute -top-2 -right-2 bg-red-600 border-2 border-red-800 text-white w-6 h-6 flex items-center justify-center text-lg font-bold hover:bg-red-700"
+            aria-label="Close"
+        >
+           <span style={{transform: 'translateY(-1px)'}}>×</span>
+        </button>
         <p>{partnerName} is now online!</p>
         {showSendHi && (
             <div className="text-center">
@@ -992,7 +1000,7 @@ const App: React.FC = () => {
   }, [userCharacter, partnerCharacter]);
   
     // --- FULLSCREEN HANDLING ---
-    const toggleFullscreen = () => {
+    const toggleFullscreen = async () => {
         const doc = document as any;
         const docEl = document.documentElement as any;
 
@@ -1001,12 +1009,37 @@ const App: React.FC = () => {
         const fullscreenElement = doc.fullscreenElement || doc.mozFullScreenElement || doc.webkitFullscreenElement || doc.msFullscreenElement;
 
         if (!fullscreenElement) {
-            requestFullscreen.call(docEl).catch((err: Error) => {
-                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-            });
+            if (requestFullscreen) {
+                try {
+                    await requestFullscreen.call(docEl);
+                    // After entering fullscreen, some mobile browsers force landscape.
+                    // To prevent this, we lock the orientation to what it was when we entered fullscreen.
+                    // The trade-off is that this disables auto-rotation while in fullscreen.
+                    // FIX: Cast screen.orientation to `any` to access the experimental `lock` method which may not be in default TS DOM types.
+                    if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
+                        try {
+                            await (screen.orientation as any).lock(screen.orientation.type);
+                        } catch (e) {
+                            console.warn("Could not lock screen orientation:", e);
+                        }
+                    }
+                } catch (err: any) {
+                    console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                }
+            }
         } else {
             if (exitFullscreen) {
-                exitFullscreen.call(doc);
+                // Always unlock orientation on exiting fullscreen to restore default behavior.
+                // FIX: Cast screen.orientation to `any` to access the experimental `unlock` method.
+                if (screen.orientation && typeof (screen.orientation as any).unlock === 'function') {
+                    (screen.orientation as any).unlock();
+                }
+                
+                try {
+                    await exitFullscreen.call(doc);
+                } catch (err: any) {
+                    console.error(`Error attempting to exit full-screen mode: ${err.message} (${err.name})`);
+                }
             }
         }
     };
@@ -1216,9 +1249,12 @@ const App: React.FC = () => {
         setHiSent(false);
     } else if (isPartnerOnline && !prevIsPartnerOnline && partnerFocus === FocusState.Idle) {
         setShowOnlineNotification(true);
+        if (onlineNotificationTimerRef.current) {
+            clearTimeout(onlineNotificationTimerRef.current);
+        }
         onlineNotificationTimerRef.current = window.setTimeout(() => {
             setShowOnlineNotification(false);
-        }, 4000);
+        }, 15000);
     }
   }, [isPartnerOnline, prevIsPartnerOnline, partnerFocus, prevPartnerFocus]);
   
@@ -1347,6 +1383,14 @@ const App: React.FC = () => {
   const handleToggleMute = () => {
       setIsMuted(prev => !prev);
   }
+  
+  const handleCloseOnlineNotification = () => {
+      if (onlineNotificationTimerRef.current) {
+          clearTimeout(onlineNotificationTimerRef.current);
+          onlineNotificationTimerRef.current = null;
+      }
+      setShowOnlineNotification(false);
+  };
 
   if (!userCharacter) {
     return <OnboardingScreen onSelect={handleCharacterSelect} />;
@@ -1364,6 +1408,7 @@ const App: React.FC = () => {
         partnerName={partnerCharacter} 
         showSendHi={userFocus === FocusState.Focusing && !hiSent}
         onSendHi={handleSendHi}
+        onClose={handleCloseOnlineNotification}
       />}
       {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
       {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
