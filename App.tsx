@@ -1084,13 +1084,13 @@ const App: React.FC = () => {
   // --- AUDIO HANDLING ---
   useEffect(() => {
     const musicEl = musicRef.current;
-    
-    if (musicEl) musicEl.volume = 0.3;
+    if (!musicEl) return;
 
     if (isMuted) {
-        musicEl?.pause();
+        musicEl.pause();
     } else {
-        musicEl?.play().catch(e => console.error("Music play failed", e));
+        musicEl.volume = 0.3;
+        musicEl.play().catch(e => console.error("Music play failed", e));
     }
   }, [isMuted]);
 
@@ -1469,69 +1469,71 @@ const App: React.FC = () => {
       setShowOnlineNotification(false);
   };
 
-  if (!userCharacter) {
-    return <OnboardingScreen onSelect={handleCharacterSelect} />;
-  }
-  
   const isUserInSession = userFocus === FocusState.Focusing || userFocus === FocusState.Paused;
   const isPartnerInSession = partnerFocus === FocusState.Focusing || partnerFocus === FocusState.Paused;
 
   return (
-    <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
+    <>
       <audio ref={musicRef} src={AUDIO.BACKGROUND_MUSIC} loop />
       <audio ref={silentAudioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABgAAABkYXRhAAAAAA==" loop />
-
-      {showOnlineNotification && <OnlinePresenceNotification 
-        partnerName={partnerCharacter} 
-        showSendHi={userFocus === FocusState.Focusing && !hiSent}
-        onSendHi={handleSendHi}
-        onClose={handleCloseOnlineNotification}
-      />}
-      {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
-      {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
-      {receivedReward && <RewardNotification 
-            reward={receivedReward} 
-            onDismiss={() => setReceivedReward(null)} 
-            onAcknowledge={handleAcknowledgeReward}
-            onRespond={handleRespondToReward} />}
-      {receivedMessage && <MessageNotification 
-            message={receivedMessage}
-            onDismiss={() => setReceivedMessage(null)}
-            onReact={handleReactToMessage}
-            onRespond={handleRespondToMessage}
-      />}
-      {showRewardModal && <RewardModal from={userCharacter} onSend={handleSendRewardFromModal} onSkip={() => setShowRewardModal(false)} />}
-
-      <MainDisplay
-        user={userCharacter}
-        partner={partnerCharacter}
-        userFocus={userFocus}
-        partnerFocus={partnerFocus}
-        onStart={handleStart}
-        onJoin={handleJoin}
-        onEnd={handleEnd}
-        onPause={handlePause}
-        onResume={handleResume}
-        isMuted={isMuted}
-        onToggleMute={handleToggleMute}
-        userElapsedSeconds={userElapsedSeconds}
-        partnerElapsedSeconds={partnerElapsedSeconds}
-        isUserInSession={isUserInSession}
-        isPartnerInSession={isPartnerInSession}
-        isFullscreen={isFullscreen}
-        onToggleFullscreen={toggleFullscreen}
-      />
       
-      <PowerCoupleStats 
-        user={userCharacter}
-        partner={partnerCharacter}
-        userStats={{ today: userTodayTime, yesterday: userYesterdayTime }}
-        partnerStats={{ today: partnerTodayTime, yesterday: partnerYesterdayTime }}
-        jointTime={{ today: jointTodayTime, yesterday: jointYesterdayTime }}
-        isOpen={showStats}
-        onToggle={handleToggleStats}
-      />
-    </div>
+      {!userCharacter ? (
+        <OnboardingScreen onSelect={handleCharacterSelect} />
+      ) : (
+        <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
+          {showOnlineNotification && <OnlinePresenceNotification 
+            partnerName={partnerCharacter} 
+            showSendHi={userFocus === FocusState.Focusing && !hiSent}
+            onSendHi={handleSendHi}
+            onClose={handleCloseOnlineNotification}
+          />}
+          {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
+          {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
+          {receivedReward && <RewardNotification 
+                reward={receivedReward} 
+                onDismiss={() => setReceivedReward(null)} 
+                onAcknowledge={handleAcknowledgeReward}
+                onRespond={handleRespondToReward} />}
+          {receivedMessage && <MessageNotification 
+                message={receivedMessage}
+                onDismiss={() => setReceivedMessage(null)}
+                onReact={handleReactToMessage}
+                onRespond={handleRespondToMessage}
+          />}
+          {showRewardModal && <RewardModal from={userCharacter} onSend={handleSendRewardFromModal} onSkip={() => setShowRewardModal(false)} />}
+
+          <MainDisplay
+            user={userCharacter}
+            partner={partnerCharacter}
+            userFocus={userFocus}
+            partnerFocus={partnerFocus}
+            onStart={handleStart}
+            onJoin={handleJoin}
+            onEnd={handleEnd}
+            onPause={handlePause}
+            onResume={handleResume}
+            isMuted={isMuted}
+            onToggleMute={handleToggleMute}
+            userElapsedSeconds={userElapsedSeconds}
+            partnerElapsedSeconds={partnerElapsedSeconds}
+            isUserInSession={isUserInSession}
+            isPartnerInSession={isPartnerInSession}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={toggleFullscreen}
+          />
+          
+          <PowerCoupleStats 
+            user={userCharacter}
+            partner={partnerCharacter}
+            userStats={{ today: userTodayTime, yesterday: userYesterdayTime }}
+            partnerStats={{ today: partnerTodayTime, yesterday: partnerYesterdayTime }}
+            jointTime={{ today: jointTodayTime, yesterday: jointYesterdayTime }}
+            isOpen={showStats}
+            onToggle={handleToggleStats}
+          />
+        </div>
+      )}
+    </>
   );
 };
 
