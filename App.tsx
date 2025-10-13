@@ -1120,25 +1120,37 @@ const App: React.FC = () => {
   }, [isMuted]);
 
   // --- FIREBASE REAL-TIME LOGIC ---
+  // This effect runs once on character selection to check for and clean up old sessions.
+  useEffect(() => {
+    if (!userCharacter) return;
+    
+    const userStatusRef = database.ref(`users/${userCharacter}`);
+    userStatusRef.once('value', (snapshot: any) => {
+        const data = snapshot.val();
+        if (data && (data.focusState === FocusState.Focusing || data.focusState === FocusState.Paused) && data.focusStartTime) {
+            console.log("Dangling focus session detected. Resetting state.");
+            userStatusRef.update({
+                focusState: FocusState.Idle,
+                focusStartTime: null,
+                totalPausedTime: null,
+                lastPauseStartTime: null,
+            });
+        }
+    });
+  }, [userCharacter]);
+  
+  // This effect sets up all the long-running listeners for the app.
   useEffect(() => {
     if (!userCharacter) return;
 
     const userStatusRef = database.ref(`users/${userCharacter}`);
-
-    // Check for dangling session on load
-    userStatusRef.once('value', (snapshot: any) => {
-        const data = snapshot.val();
-        if (data && (data.focusState === FocusState.Focusing || data.focusState === FocusState.Paused) && data.focusStartTime) {
-            console.log("Dangling focus session detected. Ending it now.");
-            handleEnd();
-        }
-    });
-
     const partnerRef = database.ref(`users/${partnerCharacter}`);
     
+    // Set up presence management
     database.ref('.info/connected').on('value', (snapshot: any) => {
         if (snapshot.val() === false) return;
         
+        // When the client disconnects, Firebase will automatically update their status.
         userStatusRef.onDisconnect().update({
             isOnline: false,
             focusState: FocusState.Idle,
@@ -1146,21 +1158,12 @@ const App: React.FC = () => {
             totalPausedTime: null,
             lastPauseStartTime: null,
         }).then(() => {
+            // Once the disconnect handler is registered, set the user as online.
             userStatusRef.update({ isOnline: true });
         });
     });
 
-    const onUserChange = (snapshot: any) => {
-        const data = snapshot.val();
-        if (data) {
-            setUserFocus(data.focusState || FocusState.Idle);
-            setUserFocusStartTime(data.focusStartTime || null);
-            setUserTotalPausedTime(data.totalPausedTime || null);
-            setUserLastPauseStartTime(data.lastPauseStartTime || null);
-        }
-    };
-    userStatusRef.on('value', onUserChange);
-
+    // Listen for partner's status changes
     const onPartnerChange = (snapshot: any) => {
         const data = snapshot.val();
         const partnerIsCurrentlyOnline = !!(data && data.isOnline);
@@ -1180,6 +1183,7 @@ const App: React.FC = () => {
     };
     partnerRef.on('value', onPartnerChange);
     
+    // Listen for incoming rewards
     const onRewardReceived = (snapshot: any) => {
         const reward = snapshot.val();
         if(reward) {
@@ -1189,6 +1193,7 @@ const App: React.FC = () => {
     };
     userStatusRef.child('lastRewardReceived').on('value', onRewardReceived);
 
+    // Listen for incoming messages
     const onMessageReceived = (snapshot: any) => {
         const message = snapshot.val();
         if(message) {
@@ -1225,9 +1230,9 @@ const App: React.FC = () => {
     });
 
 
+    // Cleanup function to detach all listeners when component unmounts or user changes
     return () => {
         database.ref('.info/connected').off();
-        userStatusRef.off('value', onUserChange);
         partnerRef.off('value', onPartnerChange);
         userStatusRef.child('lastRewardReceived').off('value', onRewardReceived);
         userStatusRef.child('lastMessageReceived').off('value', onMessageReceived);
@@ -1235,7 +1240,7 @@ const App: React.FC = () => {
             refs[key].off('value', listeners[key]);
         });
     };
-  }, [userCharacter, partnerCharacter, handleEnd]);
+  }, [userCharacter, partnerCharacter]);
   
   // --- TIMER CALCULATION LOGIC ---
   useEffect(() => {
