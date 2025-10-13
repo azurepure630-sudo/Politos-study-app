@@ -1291,15 +1291,28 @@ const App: React.FC = () => {
   }, []);
 
   const startFocusing = useCallback(() => {
-    if (userCharacter) {
-      database.ref(`users/${userCharacter}`).update({
+    if (!userCharacter) return;
+
+    // Optimistically update the UI for immediate feedback, making the app feel responsive.
+    setUserFocus(FocusState.Focusing);
+    setUserFocusStartTime(Date.now());
+    setUserTotalPausedTime(0);
+    setUserLastPauseStartTime(null);
+
+    // Perform database and audio operations in the background.
+    database.ref(`users/${userCharacter}`).update({
         focusState: FocusState.Focusing,
-        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
+        focusStartTime: firebase.database.ServerValue.TIMESTAMP, // Use server time for canonical record
         totalPausedTime: 0,
         lastPauseStartTime: null,
-      });
-      silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
-    }
+    }).catch(error => {
+        console.error("Firebase start focus failed:", error);
+        // On failure, revert the UI to its previous state.
+        setUserFocus(FocusState.Idle);
+        setUserFocusStartTime(null);
+    });
+
+    silentAudioRef.current?.play().catch(e => console.error("Silent audio playback failed on start:", e));
   }, [userCharacter]);
 
   const handleStart = useCallback(() => startFocusing(), [startFocusing]);
