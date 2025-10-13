@@ -1447,22 +1447,20 @@ const App: React.FC = () => {
 
   const handleCharacterSelect = (character: Character) => {
     // Try to play music on user interaction to satisfy autoplay policies.
-    // We fire and forget this, not waiting for it to complete.
     if (musicRef.current) {
         musicRef.current.volume = 0; // Play silently at first
         musicRef.current.play().catch(error => {
             console.error("Audio playback unlock failed:", error);
-            // The app continues regardless of audio success.
         });
     }
 
-    // Update Firebase in the background. The UI transition doesn't need to wait for this.
+    // Update the database, but let the presence system in the main useEffect handle setting `isOnline`.
+    // This avoids a race condition and makes the presence logic the single source of truth.
     database.ref(`users/${character}`).update({
         focusState: FocusState.Idle,
         focusStartTime: null,
         totalPausedTime: null,
         lastPauseStartTime: null,
-        isOnline: true,
     }).catch(error => console.error("Firebase initial update failed:", error));
     
     // Update state immediately to transition to the main app view.
