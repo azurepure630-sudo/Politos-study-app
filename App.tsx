@@ -40,6 +40,9 @@ const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reje
     reader.onerror = error => reject(error);
 });
 
+const isMobile = (): boolean => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+
 const PixelButton: React.FC<{ onClick: () => void; children: React.ReactNode; className?: string; variant?: 'primary' | 'secondary' | 'danger', disabled?: boolean; }> = ({ onClick, children, className = '', variant = 'primary', disabled = false }) => {
   const colors = {
     primary: 'bg-[#7a5a3b] hover:bg-[#8e6945] border-[#4d3924]',
@@ -1032,9 +1035,13 @@ const App: React.FC = () => {
         try {
             if (!fullscreenElement) {
                 if (requestFullscreen) {
-                    // Determine and store the desired orientation BEFORE requesting fullscreen.
-                    const isPortrait = window.innerHeight > window.innerWidth;
-                    desiredOrientationRef.current = isPortrait ? 'portrait' : 'landscape';
+                    // Determine and store the desired orientation BEFORE requesting fullscreen, but only on mobile.
+                    if (isMobile()) {
+                        const isPortrait = window.innerHeight > window.innerWidth;
+                        desiredOrientationRef.current = isPortrait ? 'portrait' : 'landscape';
+                    } else {
+                        desiredOrientationRef.current = null;
+                    }
                     await requestFullscreen.call(docEl);
                 }
             } else {
@@ -1061,9 +1068,6 @@ const App: React.FC = () => {
                 if (desiredOrientationRef.current) {
                     try {
                         if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
-                            // FIX: The type `OrientationLockType` is not available in all TypeScript DOM library versions.
-                            // The type assertion has been removed as `desiredOrientationRef.current` already holds a valid string 
-                            // ('portrait' or 'landscape') for the `lock` method.
                             await (screen.orientation as any).lock(desiredOrientationRef.current);
                         }
                     } catch (err) {
