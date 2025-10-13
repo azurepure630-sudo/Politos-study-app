@@ -836,7 +836,7 @@ const MainDisplay: React.FC<{
             text = "Rest politos, lil rests go a long way";
         } else { // Partner is idle
             imageSrc = IMAGES.IDLE;
-            text = "You are on a break.";
+            text = "You are on a break";
         }
     } else if (isUserIdle) {
         if (isPartnerFocusing) {
@@ -1408,16 +1408,6 @@ const App: React.FC = () => {
 
 
   const handleCharacterSelect = async (character: Character) => {
-    try {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        const audioContext = new AudioContext();
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-    } catch (e) {
-        console.error("Could not initialize AudioContext", e);
-    }
-
     await database.ref(`users/${character}`).update({
         focusState: FocusState.Idle,
         focusStartTime: null,
