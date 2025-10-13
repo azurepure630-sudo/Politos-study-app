@@ -943,92 +943,67 @@ const App: React.FC = () => {
 
   const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
   
-  const handleEnd = useCallback(() => {
+  const handleEnd = useCallback(async () => {
     if (!userCharacter) return;
+    const now = Date.now();
     
-    // Capture necessary state for the background task before it gets cleared.
-    const sessionData = {
-        focusState: userFocus,
-        focusStartTime: userFocusStartTime,
-        totalPausedTime: userTotalPausedTime,
-        lastPauseStartTime: userLastPauseStartTime,
-    };
+    const userRef = database.ref(`users/${userCharacter}`);
+    const partnerRef = database.ref(`users/${partnerCharacter}`);
+
+    const [userSnapshot, partnerSnapshot] = await Promise.all([userRef.once('value'), partnerRef.once('value')]);
     
-    // 1. Optimistically update the UI for immediate feedback.
-    setUserFocus(FocusState.Idle);
-    setUserFocusStartTime(null);
-    setUserTotalPausedTime(null);
-    setUserLastPauseStartTime(null);
-    setShowRewardModal(true);
+    const userData = userSnapshot.val();
+    const partnerData = partnerSnapshot.val();
+
+    if (!userData || !partnerData) return;
+    
+    if ((userData.focusState !== FocusState.Focusing && userData.focusState !== FocusState.Paused) || !userData.focusStartTime) {
+        return; 
+    }
+    
+    let finalTotalPausedTime = userData.totalPausedTime || 0;
+    if (userData.focusState === FocusState.Paused && userData.lastPauseStartTime) {
+        finalTotalPausedTime += (now - userData.lastPauseStartTime);
+    }
+    const sessionDurationMs = (now - userData.focusStartTime) - finalTotalPausedTime;
+    const sessionDurationSec = sessionDurationMs > 0 ? Math.floor(sessionDurationMs / 1000) : 0;
+
+    const todayDateString = getCycleDateString(now);
+    const updates: { [key: string]: any } = {};
+
+    if (sessionDurationSec > 0) {
+        updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
+    }
+    
+    if ((partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
+        let partnerFinalTotalPaused = partnerData.totalPausedTime || 0;
+        if (partnerData.focusState === FocusState.Paused && partnerData.lastPauseStartTime) {
+            partnerFinalTotalPaused += (now - partnerData.lastPauseStartTime);
+        }
+        
+        const userEffectiveStart = userData.focusStartTime + finalTotalPausedTime;
+        const partnerEffectiveStart = partnerData.focusStartTime + partnerFinalTotalPaused;
+        const effectiveJointStartTime = Math.max(userEffectiveStart, partnerEffectiveStart);
+        const jointDurationMs = now - effectiveJointStartTime;
+        const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
+
+        if (jointDurationSec > 0) {
+            updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
+        }
+    }
+    
+    updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
+    updates[`/users/${userCharacter}/focusStartTime`] = null;
+    updates[`/users/${userCharacter}/totalPausedTime`] = null;
+    updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
+
+    await database.ref().update(updates);
+
     silentAudioRef.current?.pause();
 
-    // 2. Perform database updates and calculations in the background.
-    const finalizeSessionInBackground = async () => {
-        const { focusState, focusStartTime, totalPausedTime, lastPauseStartTime } = sessionData;
-
-        if ((focusState !== FocusState.Focusing && focusState !== FocusState.Paused) || !focusStartTime) {
-            // If there was no active session according to our captured state, just ensure DB is clean.
-            database.ref(`users/${userCharacter}`).update({
-                focusState: FocusState.Idle,
-                focusStartTime: null,
-                totalPausedTime: null,
-                lastPauseStartTime: null,
-            });
-            return;
-        }
-
-        const now = Date.now();
-        const partnerRef = database.ref(`users/${partnerCharacter}`);
-        const partnerSnapshot = await partnerRef.once('value');
-        const partnerData = partnerSnapshot.val();
-
-        // Calculate user's session duration
-        let finalTotalPausedTime = totalPausedTime || 0;
-        if (focusState === FocusState.Paused && lastPauseStartTime) {
-            finalTotalPausedTime += (now - lastPauseStartTime);
-        }
-        const sessionDurationMs = (now - focusStartTime) - finalTotalPausedTime;
-        const sessionDurationSec = sessionDurationMs > 0 ? Math.floor(sessionDurationMs / 1000) : 0;
-        
-        const todayDateString = getCycleDateString(now);
-        const updates: { [key: string]: any } = {};
-
-        if (sessionDurationSec > 0) {
-            updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
-        }
-
-        // Calculate joint session duration
-        if (partnerData && (partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
-            let partnerFinalTotalPaused = partnerData.totalPausedTime || 0;
-            if (partnerData.focusState === FocusState.Paused && partnerData.lastPauseStartTime) {
-                partnerFinalTotalPaused += (now - partnerData.lastPauseStartTime);
-            }
-            
-            const userEffectiveStart = focusStartTime + finalTotalPausedTime;
-            const partnerEffectiveStart = partnerData.focusStartTime + partnerFinalTotalPaused;
-            const effectiveJointStartTime = Math.max(userEffectiveStart, partnerEffectiveStart);
-            const jointDurationMs = now - effectiveJointStartTime;
-            const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
-
-            if (jointDurationSec > 0) {
-                updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
-            }
-        }
-        
-        // Finalize user state in DB
-        updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
-        updates[`/users/${userCharacter}/focusStartTime`] = null;
-        updates[`/users/${userCharacter}/totalPausedTime`] = null;
-        updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
-
-        await database.ref().update(updates);
-    };
-
-    finalizeSessionInBackground().catch(error => {
-        console.error("Failed to finalize session in background:", error);
-    });
-
-  }, [userCharacter, partnerCharacter, userFocus, userFocusStartTime, userTotalPausedTime, userLastPauseStartTime]);
+    setSessionType(SessionType.None);
+    setShowRewardModal(true);
+  }, [userCharacter, partnerCharacter]);
   
     // --- FULLSCREEN HANDLING ---
     const toggleFullscreen = useCallback(async () => {
@@ -1109,48 +1084,36 @@ const App: React.FC = () => {
   // --- AUDIO HANDLING ---
   useEffect(() => {
     const musicEl = musicRef.current;
-    if (!musicEl) return;
+    
+    if (musicEl) musicEl.volume = 0.3;
 
     if (isMuted) {
-        musicEl.pause();
+        musicEl?.pause();
     } else {
-        musicEl.volume = 0.3;
-        musicEl.play().catch(e => console.error("Music play failed", e));
+        musicEl?.play().catch(e => console.error("Music play failed", e));
     }
   }, [isMuted]);
 
   // --- FIREBASE REAL-TIME LOGIC ---
-  // This effect runs once on character selection to check for and clean up old sessions.
-  useEffect(() => {
-    if (!userCharacter) return;
-    
-    const userStatusRef = database.ref(`users/${userCharacter}`);
-    userStatusRef.once('value', (snapshot: any) => {
-        const data = snapshot.val();
-        if (data && (data.focusState === FocusState.Focusing || data.focusState === FocusState.Paused) && data.focusStartTime) {
-            console.log("Dangling focus session detected. Resetting state.");
-            userStatusRef.update({
-                focusState: FocusState.Idle,
-                focusStartTime: null,
-                totalPausedTime: null,
-                lastPauseStartTime: null,
-            });
-        }
-    });
-  }, [userCharacter]);
-  
-  // This effect sets up all the long-running listeners for the app.
   useEffect(() => {
     if (!userCharacter) return;
 
     const userStatusRef = database.ref(`users/${userCharacter}`);
+
+    // Check for dangling session on load
+    userStatusRef.once('value', (snapshot: any) => {
+        const data = snapshot.val();
+        if (data && (data.focusState === FocusState.Focusing || data.focusState === FocusState.Paused) && data.focusStartTime) {
+            console.log("Dangling focus session detected. Ending it now.");
+            handleEnd();
+        }
+    });
+
     const partnerRef = database.ref(`users/${partnerCharacter}`);
     
-    // Set up presence management
     database.ref('.info/connected').on('value', (snapshot: any) => {
         if (snapshot.val() === false) return;
         
-        // When the client disconnects, Firebase will automatically update their status.
         userStatusRef.onDisconnect().update({
             isOnline: false,
             focusState: FocusState.Idle,
@@ -1158,12 +1121,21 @@ const App: React.FC = () => {
             totalPausedTime: null,
             lastPauseStartTime: null,
         }).then(() => {
-            // Once the disconnect handler is registered, set the user as online.
             userStatusRef.update({ isOnline: true });
         });
     });
 
-    // Listen for partner's status changes
+    const onUserChange = (snapshot: any) => {
+        const data = snapshot.val();
+        if (data) {
+            setUserFocus(data.focusState || FocusState.Idle);
+            setUserFocusStartTime(data.focusStartTime || null);
+            setUserTotalPausedTime(data.totalPausedTime || null);
+            setUserLastPauseStartTime(data.lastPauseStartTime || null);
+        }
+    };
+    userStatusRef.on('value', onUserChange);
+
     const onPartnerChange = (snapshot: any) => {
         const data = snapshot.val();
         const partnerIsCurrentlyOnline = !!(data && data.isOnline);
@@ -1183,7 +1155,6 @@ const App: React.FC = () => {
     };
     partnerRef.on('value', onPartnerChange);
     
-    // Listen for incoming rewards
     const onRewardReceived = (snapshot: any) => {
         const reward = snapshot.val();
         if(reward) {
@@ -1193,7 +1164,6 @@ const App: React.FC = () => {
     };
     userStatusRef.child('lastRewardReceived').on('value', onRewardReceived);
 
-    // Listen for incoming messages
     const onMessageReceived = (snapshot: any) => {
         const message = snapshot.val();
         if(message) {
@@ -1230,9 +1200,9 @@ const App: React.FC = () => {
     });
 
 
-    // Cleanup function to detach all listeners when component unmounts or user changes
     return () => {
         database.ref('.info/connected').off();
+        userStatusRef.off('value', onUserChange);
         partnerRef.off('value', onPartnerChange);
         userStatusRef.child('lastRewardReceived').off('value', onRewardReceived);
         userStatusRef.child('lastMessageReceived').off('value', onMessageReceived);
@@ -1240,7 +1210,7 @@ const App: React.FC = () => {
             refs[key].off('value', listeners[key]);
         });
     };
-  }, [userCharacter, partnerCharacter]);
+  }, [userCharacter, partnerCharacter, handleEnd]);
   
   // --- TIMER CALCULATION LOGIC ---
   useEffect(() => {
@@ -1321,75 +1291,48 @@ const App: React.FC = () => {
   }, []);
 
   const startFocusing = useCallback(() => {
-    if (!userCharacter) return;
-
-    // Optimistically update the UI for immediate feedback, making the app feel responsive.
-    setUserFocus(FocusState.Focusing);
-    setUserFocusStartTime(Date.now());
-    setUserTotalPausedTime(0);
-    setUserLastPauseStartTime(null);
-
-    // Perform database and audio operations in the background.
-    database.ref(`users/${userCharacter}`).update({
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
         focusState: FocusState.Focusing,
-        focusStartTime: firebase.database.ServerValue.TIMESTAMP, // Use server time for canonical record
+        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
         totalPausedTime: 0,
         lastPauseStartTime: null,
-    }).catch(error => {
-        console.error("Firebase start focus failed:", error);
-        // On failure, revert the UI to its previous state.
-        setUserFocus(FocusState.Idle);
-        setUserFocusStartTime(null);
-    });
-
-    silentAudioRef.current?.play().catch(e => console.error("Silent audio playback failed on start:", e));
+      });
+      silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
+    }
   }, [userCharacter]);
 
   const handleStart = useCallback(() => startFocusing(), [startFocusing]);
   const handleJoin = useCallback(() => startFocusing(), [startFocusing]);
 
   const handlePause = useCallback(() => {
-    if (!userCharacter) return;
-
-    // Optimistic UI update for instant feedback
-    setUserFocus(FocusState.Paused);
-    setUserLastPauseStartTime(Date.now());
-    
-    // Perform background tasks
-    database.ref(`users/${userCharacter}`).update({
-      focusState: FocusState.Paused,
-      lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
-    }).catch(error => {
-        console.error("Firebase pause failed:", error);
-        // Optionally revert UI state here if the update fails
-    });
-
-    silentAudioRef.current?.pause();
+    if (userCharacter) {
+      database.ref(`users/${userCharacter}`).update({
+        focusState: FocusState.Paused,
+        lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
+      });
+      silentAudioRef.current?.pause();
+    }
   }, [userCharacter]);
 
-  const handleResume = useCallback(() => {
-    if (!userCharacter || userFocus !== FocusState.Paused || userLastPauseStartTime === null) return;
+  const handleResume = useCallback(async () => {
+    if (!userCharacter) return;
+    const userRef = database.ref(`users/${userCharacter}`);
+    const snapshot = await userRef.once('value');
+    const data = snapshot.val();
 
-    const pausedDuration = Date.now() - userLastPauseStartTime;
-    const newTotalPausedTime = (userTotalPausedTime || 0) + pausedDuration;
-    
-    // Optimistic UI update
-    setUserFocus(FocusState.Focusing);
-    setUserTotalPausedTime(newTotalPausedTime);
-    setUserLastPauseStartTime(null);
+    if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
+        const pausedDuration = Date.now() - data.lastPauseStartTime;
+        const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
 
-    // Background tasks
-    database.ref(`users/${userCharacter}`).update({
-        focusState: FocusState.Focusing,
-        totalPausedTime: newTotalPausedTime,
-        lastPauseStartTime: null
-    }).catch(error => {
-        console.error("Firebase resume failed:", error);
-        // Optionally revert UI state here if the update fails
-    });
-    
-    silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played on resume", e));
-  }, [userCharacter, userFocus, userLastPauseStartTime, userTotalPausedTime]);
+        await userRef.update({
+            focusState: FocusState.Focusing,
+            totalPausedTime: newTotalPausedTime,
+            lastPauseStartTime: null
+        });
+        silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
+    }
+  }, [userCharacter]);
 
   const handleToggleStats = useCallback(() => {
       setShowStats(prev => !prev);
@@ -1445,27 +1388,24 @@ const App: React.FC = () => {
   }, [userFocus, partnerFocus, isFullscreen, handleStart, handleJoin, handlePause, handleResume, handleEnd, handleToggleMute, handleToggleStats, toggleFullscreen]);
 
 
-  const handleCharacterSelect = (character: Character) => {
-    // Try to play music on user interaction to satisfy autoplay policies.
-    if (musicRef.current) {
-        musicRef.current.volume = 0; // Play silently at first
-        musicRef.current.play().catch(error => {
-            console.error("Audio playback unlock failed:", error);
-        });
+  const handleCharacterSelect = async (character: Character) => {
+    try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        const audioContext = new AudioContext();
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+    } catch (e) {
+        console.error("Could not initialize AudioContext", e);
     }
 
-    // Update the database, but let the presence system in the main useEffect handle setting `isOnline`.
-    // This avoids a race condition and makes the presence logic the single source of truth.
-    database.ref(`users/${character}`).update({
+    await database.ref(`users/${character}`).update({
         focusState: FocusState.Idle,
         focusStartTime: null,
-        totalPausedTime: null,
-        lastPauseStartTime: null,
-    }).catch(error => console.error("Firebase initial update failed:", error));
-    
-    // Update state immediately to transition to the main app view.
+        isOnline: true,
+    });
     setUserCharacter(character);
-    setIsMuted(false); // This will trigger the useEffect to set the correct volume.
+    setIsMuted(false); 
   };
 
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
@@ -1522,71 +1462,69 @@ const App: React.FC = () => {
       setShowOnlineNotification(false);
   };
 
+  if (!userCharacter) {
+    return <OnboardingScreen onSelect={handleCharacterSelect} />;
+  }
+  
   const isUserInSession = userFocus === FocusState.Focusing || userFocus === FocusState.Paused;
   const isPartnerInSession = partnerFocus === FocusState.Focusing || partnerFocus === FocusState.Paused;
 
   return (
-    <>
+    <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
       <audio ref={musicRef} src={AUDIO.BACKGROUND_MUSIC} loop />
       <audio ref={silentAudioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABgAAABkYXRhAAAAAA==" loop />
-      
-      {!userCharacter ? (
-        <OnboardingScreen onSelect={handleCharacterSelect} />
-      ) : (
-        <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
-          {showOnlineNotification && <OnlinePresenceNotification 
-            partnerName={partnerCharacter} 
-            showSendHi={userFocus === FocusState.Focusing && !hiSent}
-            onSendHi={handleSendHi}
-            onClose={handleCloseOnlineNotification}
-          />}
-          {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
-          {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
-          {receivedReward && <RewardNotification 
-                reward={receivedReward} 
-                onDismiss={() => setReceivedReward(null)} 
-                onAcknowledge={handleAcknowledgeReward}
-                onRespond={handleRespondToReward} />}
-          {receivedMessage && <MessageNotification 
-                message={receivedMessage}
-                onDismiss={() => setReceivedMessage(null)}
-                onReact={handleReactToMessage}
-                onRespond={handleRespondToMessage}
-          />}
-          {showRewardModal && <RewardModal from={userCharacter} onSend={handleSendRewardFromModal} onSkip={() => setShowRewardModal(false)} />}
 
-          <MainDisplay
-            user={userCharacter}
-            partner={partnerCharacter}
-            userFocus={userFocus}
-            partnerFocus={partnerFocus}
-            onStart={handleStart}
-            onJoin={handleJoin}
-            onEnd={handleEnd}
-            onPause={handlePause}
-            onResume={handleResume}
-            isMuted={isMuted}
-            onToggleMute={handleToggleMute}
-            userElapsedSeconds={userElapsedSeconds}
-            partnerElapsedSeconds={partnerElapsedSeconds}
-            isUserInSession={isUserInSession}
-            isPartnerInSession={isPartnerInSession}
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={toggleFullscreen}
-          />
-          
-          <PowerCoupleStats 
-            user={userCharacter}
-            partner={partnerCharacter}
-            userStats={{ today: userTodayTime, yesterday: userYesterdayTime }}
-            partnerStats={{ today: partnerTodayTime, yesterday: partnerYesterdayTime }}
-            jointTime={{ today: jointTodayTime, yesterday: jointYesterdayTime }}
-            isOpen={showStats}
-            onToggle={handleToggleStats}
-          />
-        </div>
-      )}
-    </>
+      {showOnlineNotification && <OnlinePresenceNotification 
+        partnerName={partnerCharacter} 
+        showSendHi={userFocus === FocusState.Focusing && !hiSent}
+        onSendHi={handleSendHi}
+        onClose={handleCloseOnlineNotification}
+      />}
+      {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
+      {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
+      {receivedReward && <RewardNotification 
+            reward={receivedReward} 
+            onDismiss={() => setReceivedReward(null)} 
+            onAcknowledge={handleAcknowledgeReward}
+            onRespond={handleRespondToReward} />}
+      {receivedMessage && <MessageNotification 
+            message={receivedMessage}
+            onDismiss={() => setReceivedMessage(null)}
+            onReact={handleReactToMessage}
+            onRespond={handleRespondToMessage}
+      />}
+      {showRewardModal && <RewardModal from={userCharacter} onSend={handleSendRewardFromModal} onSkip={() => setShowRewardModal(false)} />}
+
+      <MainDisplay
+        user={userCharacter}
+        partner={partnerCharacter}
+        userFocus={userFocus}
+        partnerFocus={partnerFocus}
+        onStart={handleStart}
+        onJoin={handleJoin}
+        onEnd={handleEnd}
+        onPause={handlePause}
+        onResume={handleResume}
+        isMuted={isMuted}
+        onToggleMute={handleToggleMute}
+        userElapsedSeconds={userElapsedSeconds}
+        partnerElapsedSeconds={partnerElapsedSeconds}
+        isUserInSession={isUserInSession}
+        isPartnerInSession={isPartnerInSession}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
+      
+      <PowerCoupleStats 
+        user={userCharacter}
+        partner={partnerCharacter}
+        userStats={{ today: userTodayTime, yesterday: userYesterdayTime }}
+        partnerStats={{ today: partnerTodayTime, yesterday: partnerYesterdayTime }}
+        jointTime={{ today: jointTodayTime, yesterday: jointYesterdayTime }}
+        isOpen={showStats}
+        onToggle={handleToggleStats}
+      />
+    </div>
   );
 };
 
