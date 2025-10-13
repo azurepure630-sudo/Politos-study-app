@@ -1388,7 +1388,7 @@ const App: React.FC = () => {
   }, [userFocus, partnerFocus, isFullscreen, handleStart, handleJoin, handlePause, handleResume, handleEnd, handleToggleMute, handleToggleStats, toggleFullscreen]);
 
 
-  const handleCharacterSelect = (character: Character) => {
+  const handleCharacterSelect = async (character: Character) => {
     try {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         const audioContext = new AudioContext();
@@ -1399,7 +1399,7 @@ const App: React.FC = () => {
         console.error("Could not initialize AudioContext", e);
     }
 
-    database.ref(`users/${character}`).update({
+    await database.ref(`users/${character}`).update({
         focusState: FocusState.Idle,
         focusStartTime: null,
         isOnline: true,
