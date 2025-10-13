@@ -1393,7 +1393,7 @@ const App: React.FC = () => {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         const audioContext = new AudioContext();
         if (audioContext.state === 'suspended') {
-            audioContext.resume();
+            await audioContext.resume();
         }
     } catch (e) {
         console.error("Could not initialize AudioContext", e);
@@ -1402,6 +1402,8 @@ const App: React.FC = () => {
     await database.ref(`users/${character}`).update({
         focusState: FocusState.Idle,
         focusStartTime: null,
+        totalPausedTime: null,
+        lastPauseStartTime: null,
         isOnline: true,
     });
     setUserCharacter(character);
