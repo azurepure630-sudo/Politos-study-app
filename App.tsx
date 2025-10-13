@@ -942,6 +942,21 @@ const App: React.FC = () => {
   const prevIsPartnerOnline = usePrevious(isPartnerOnline);
 
   const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
+
+  // Preload images to ensure smooth transitions
+  useEffect(() => {
+    const imagesToPreload = [
+      IMAGES.IDLE,
+      IMAGES.JOINT_FOCUS,
+      IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE,
+      IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE,
+    ];
+    
+    imagesToPreload.forEach(src => {
+      const img = new Image();
+      img.src = src;
+    });
+  }, []); // Run only once on component mount
   
   const handleEnd = useCallback(async () => {
     if (!userCharacter) return;
