@@ -1389,14 +1389,19 @@ const App: React.FC = () => {
 
 
   const handleCharacterSelect = async (character: Character) => {
-    try {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        const audioContext = new AudioContext();
-        if (audioContext.state === 'suspended') {
-            await audioContext.resume();
+    // Directly play the music on user interaction to satisfy autoplay policies.
+    // We'll set the volume to 0 initially to avoid a sudden blast of sound,
+    // and the isMuted useEffect will set the correct volume and state afterwards.
+    if (musicRef.current) {
+        const music = musicRef.current;
+        music.volume = 0; // Play silently first
+        try {
+            await music.play();
+            // The isMuted useEffect will take over from here.
+        } catch (error) {
+            console.error("Audio playback failed to unlock:", error);
+            // If it fails, the app should still proceed. Music will just be off.
         }
-    } catch (e) {
-        console.error("Could not initialize AudioContext", e);
     }
 
     await database.ref(`users/${character}`).update({
