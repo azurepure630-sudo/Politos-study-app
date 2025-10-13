@@ -1388,31 +1388,29 @@ const App: React.FC = () => {
   }, [userFocus, partnerFocus, isFullscreen, handleStart, handleJoin, handlePause, handleResume, handleEnd, handleToggleMute, handleToggleStats, toggleFullscreen]);
 
 
-  const handleCharacterSelect = async (character: Character) => {
-    // Directly play the music on user interaction to satisfy autoplay policies.
-    // We'll set the volume to 0 initially to avoid a sudden blast of sound,
-    // and the isMuted useEffect will set the correct volume and state afterwards.
+  const handleCharacterSelect = (character: Character) => {
+    // Try to play music on user interaction to satisfy autoplay policies.
+    // We fire and forget this, not waiting for it to complete.
     if (musicRef.current) {
-        const music = musicRef.current;
-        music.volume = 0; // Play silently first
-        try {
-            await music.play();
-            // The isMuted useEffect will take over from here.
-        } catch (error) {
-            console.error("Audio playback failed to unlock:", error);
-            // If it fails, the app should still proceed. Music will just be off.
-        }
+        musicRef.current.volume = 0; // Play silently at first
+        musicRef.current.play().catch(error => {
+            console.error("Audio playback unlock failed:", error);
+            // The app continues regardless of audio success.
+        });
     }
 
-    await database.ref(`users/${character}`).update({
+    // Update Firebase in the background. The UI transition doesn't need to wait for this.
+    database.ref(`users/${character}`).update({
         focusState: FocusState.Idle,
         focusStartTime: null,
         totalPausedTime: null,
         lastPauseStartTime: null,
         isOnline: true,
-    });
+    }).catch(error => console.error("Firebase initial update failed:", error));
+    
+    // Update state immediately to transition to the main app view.
     setUserCharacter(character);
-    setIsMuted(false); 
+    setIsMuted(false); // This will trigger the useEffect to set the correct volume.
   };
 
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
