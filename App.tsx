@@ -836,7 +836,7 @@ const MainDisplay: React.FC<{
             text = "Rest politos, lil rests go a long way";
         } else { // Partner is idle
             imageSrc = IMAGES.IDLE;
-            text = "You are on a break";
+            text = "You are on a break.";
         }
     } else if (isUserIdle) {
         if (isPartnerFocusing) {
@@ -965,62 +965,69 @@ const App: React.FC = () => {
     if (!userCharacter) return;
     const now = Date.now();
     
-    const userRef = database.ref(`users/${userCharacter}`);
-    const partnerRef = database.ref(`users/${partnerCharacter}`);
+    try {
+        const userRef = database.ref(`users/${userCharacter}`);
+        const partnerRef = database.ref(`users/${partnerCharacter}`);
 
-    const [userSnapshot, partnerSnapshot] = await Promise.all([userRef.once('value'), partnerRef.once('value')]);
-    
-    const userData = userSnapshot.val();
-    const partnerData = partnerSnapshot.val();
+        const [userSnapshot, partnerSnapshot] = await Promise.all([userRef.once('value'), partnerRef.once('value')]);
+        
+        const userData = userSnapshot.val();
+        const partnerData = partnerSnapshot.val();
 
-    if (!userData || !partnerData) return;
-    
-    if ((userData.focusState !== FocusState.Focusing && userData.focusState !== FocusState.Paused) || !userData.focusStartTime) {
-        return; 
-    }
-    
-    let finalTotalPausedTime = userData.totalPausedTime || 0;
-    if (userData.focusState === FocusState.Paused && userData.lastPauseStartTime) {
-        finalTotalPausedTime += (now - userData.lastPauseStartTime);
-    }
-    const sessionDurationMs = (now - userData.focusStartTime) - finalTotalPausedTime;
-    const sessionDurationSec = sessionDurationMs > 0 ? Math.floor(sessionDurationMs / 1000) : 0;
-
-    const todayDateString = getCycleDateString(now);
-    const updates: { [key: string]: any } = {};
-
-    if (sessionDurationSec > 0) {
-        updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
-    }
-    
-    if ((partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
-        let partnerFinalTotalPaused = partnerData.totalPausedTime || 0;
-        if (partnerData.focusState === FocusState.Paused && partnerData.lastPauseStartTime) {
-            partnerFinalTotalPaused += (now - partnerData.lastPauseStartTime);
+        if (!userData) {
+            console.error("User data is missing, cannot end session.");
+            return;
         }
         
-        const userEffectiveStart = userData.focusStartTime + finalTotalPausedTime;
-        const partnerEffectiveStart = partnerData.focusStartTime + partnerFinalTotalPaused;
-        const effectiveJointStartTime = Math.max(userEffectiveStart, partnerEffectiveStart);
-        const jointDurationMs = now - effectiveJointStartTime;
-        const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
-
-        if (jointDurationSec > 0) {
-            updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
+        if ((userData.focusState !== FocusState.Focusing && userData.focusState !== FocusState.Paused) || !userData.focusStartTime) {
+            return; 
         }
+        
+        let finalTotalPausedTime = userData.totalPausedTime || 0;
+        if (userData.focusState === FocusState.Paused && userData.lastPauseStartTime) {
+            finalTotalPausedTime += (now - userData.lastPauseStartTime);
+        }
+        const sessionDurationMs = (now - userData.focusStartTime) - finalTotalPausedTime;
+        const sessionDurationSec = sessionDurationMs > 0 ? Math.floor(sessionDurationMs / 1000) : 0;
+
+        const todayDateString = getCycleDateString(now);
+        const updates: { [key: string]: any } = {};
+
+        if (sessionDurationSec > 0) {
+            updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
+        }
+        
+        if (partnerData && (partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
+            let partnerFinalTotalPaused = partnerData.totalPausedTime || 0;
+            if (partnerData.focusState === FocusState.Paused && partnerData.lastPauseStartTime) {
+                partnerFinalTotalPaused += (now - partnerData.lastPauseStartTime);
+            }
+            
+            const userEffectiveStart = userData.focusStartTime + finalTotalPausedTime;
+            const partnerEffectiveStart = partnerData.focusStartTime + partnerFinalTotalPaused;
+            const effectiveJointStartTime = Math.max(userEffectiveStart, partnerEffectiveStart);
+            const jointDurationMs = now - effectiveJointStartTime;
+            const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
+
+            if (jointDurationSec > 0) {
+                updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
+            }
+        }
+        
+        updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
+        updates[`/users/${userCharacter}/focusStartTime`] = null;
+        updates[`/users/${userCharacter}/totalPausedTime`] = null;
+        updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
+
+        await database.ref().update(updates);
+    } catch (error) {
+        console.error("Failed to save session data:", error);
+        // Still proceed with UI changes even if save fails, so user is not stuck.
+    } finally {
+        silentAudioRef.current?.pause();
+        setSessionType(SessionType.None);
+        setShowRewardModal(true);
     }
-    
-    updates[`/users/${userCharacter}/focusState`] = FocusState.Idle;
-    updates[`/users/${userCharacter}/focusStartTime`] = null;
-    updates[`/users/${userCharacter}/totalPausedTime`] = null;
-    updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
-
-    await database.ref().update(updates);
-
-    silentAudioRef.current?.pause();
-
-    setSessionType(SessionType.None);
-    setShowRewardModal(true);
   }, [userCharacter, partnerCharacter]);
   
     // --- FULLSCREEN HANDLING ---
@@ -1140,7 +1147,9 @@ const App: React.FC = () => {
             totalPausedTime: null,
             lastPauseStartTime: null,
         }).then(() => {
-            userStatusRef.update({ isOnline: true });
+            userStatusRef.update({ isOnline: true }).catch(err => console.error("Could not set user online status:", err));
+        }).catch(err => {
+            console.error("Could not set onDisconnect handler:", err)
         });
     });
 
@@ -1178,7 +1187,7 @@ const App: React.FC = () => {
         const reward = snapshot.val();
         if(reward) {
             setReceivedReward(reward);
-            userStatusRef.child('lastRewardReceived').set(null);
+            userStatusRef.child('lastRewardReceived').set(null).catch(e => console.error("Failed to clear received reward:", e));
         }
     };
     userStatusRef.child('lastRewardReceived').on('value', onRewardReceived);
@@ -1187,7 +1196,7 @@ const App: React.FC = () => {
         const message = snapshot.val();
         if(message) {
             setReceivedMessage(message);
-            userStatusRef.child('lastMessageReceived').set(null);
+            userStatusRef.child('lastMessageReceived').set(null).catch(e => console.error("Failed to clear received message:", e));
         }
     };
     userStatusRef.child('lastMessageReceived').on('value', onMessageReceived);
@@ -1316,6 +1325,9 @@ const App: React.FC = () => {
         focusStartTime: firebase.database.ServerValue.TIMESTAMP,
         totalPausedTime: 0,
         lastPauseStartTime: null,
+      }).catch(err => {
+          console.error("Failed to start focus session:", err);
+          alert("Could not start session. Please check your connection and try again.");
       });
       silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
     }
@@ -1329,6 +1341,9 @@ const App: React.FC = () => {
       database.ref(`users/${userCharacter}`).update({
         focusState: FocusState.Paused,
         lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
+      }).catch(err => {
+        console.error("Failed to pause session:", err);
+        alert("Could not pause session. Please try again.");
       });
       silentAudioRef.current?.pause();
     }
@@ -1336,20 +1351,25 @@ const App: React.FC = () => {
 
   const handleResume = useCallback(async () => {
     if (!userCharacter) return;
-    const userRef = database.ref(`users/${userCharacter}`);
-    const snapshot = await userRef.once('value');
-    const data = snapshot.val();
+    try {
+        const userRef = database.ref(`users/${userCharacter}`);
+        const snapshot = await userRef.once('value');
+        const data = snapshot.val();
 
-    if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
-        const pausedDuration = Date.now() - data.lastPauseStartTime;
-        const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
+        if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
+            const pausedDuration = Date.now() - data.lastPauseStartTime;
+            const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
 
-        await userRef.update({
-            focusState: FocusState.Focusing,
-            totalPausedTime: newTotalPausedTime,
-            lastPauseStartTime: null
-        });
-        silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
+            await userRef.update({
+                focusState: FocusState.Focusing,
+                totalPausedTime: newTotalPausedTime,
+                lastPauseStartTime: null
+            });
+            silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
+        }
+    } catch (error) {
+        console.error("Failed to resume session:", error);
+        alert("Could not resume the session. Please try again.");
     }
   }, [userCharacter]);
 
@@ -1408,13 +1428,18 @@ const App: React.FC = () => {
 
 
   const handleCharacterSelect = async (character: Character) => {
-    await database.ref(`users/${character}`).update({
-        focusState: FocusState.Idle,
-        focusStartTime: null,
-        isOnline: true,
-    });
-    setUserCharacter(character);
-    setIsMuted(false); 
+    try {
+        await database.ref(`users/${character}`).update({
+            focusState: FocusState.Idle,
+            focusStartTime: null,
+            isOnline: true,
+        });
+        setUserCharacter(character);
+        setIsMuted(false);
+    } catch (error) {
+        console.error("Firebase update failed during character selection:", error);
+        alert("Could not select character. The service may be experiencing issues or you may have lost connection. Please try again later.");
+    }
   };
 
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
@@ -1447,7 +1472,10 @@ const App: React.FC = () => {
   const handleSendHi = () => {
     if (!userCharacter) return;
     const message: GreetingMessage = { from: userCharacter, content: "hiiii", type: "GREETING" };
-    database.ref(`users/${partnerCharacter}/lastMessageReceived`).set(message);
+    database.ref(`users/${partnerCharacter}/lastMessageReceived`).set(message).catch(error => {
+        console.error("Failed to send hi:", error);
+        alert("Could not send message. Please check your connection.");
+    });
     setHiSent(true);
   };
 
