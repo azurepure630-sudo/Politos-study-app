@@ -964,14 +964,23 @@ const App: React.FC = () => {
         })
         .catch((error: any) => {
             console.error("Anonymous sign-in failed:", error);
-            const userMessage = `A critical error occurred during connection. This is likely a configuration issue with your Firebase project. 
-    
-Please check the following:
-1. The API Key in constants.ts matches the key in your Firebase project settings.
-2. 'Anonymous' sign-in provider is enabled in Firebase Console > Authentication > Sign-in method.
-3. If you have API key restrictions, ensure 'identitytoolkit.googleapis.com' is enabled and your app's URL is a permitted referrer.
+            let userMessage = `Could not connect to the server. This is a configuration issue.
 
-Technical details: ${error.code} - ${error.message}`;
+Error Code: ${error.code}
+Message: ${error.message}`;
+
+            if (error.code === 'auth/operation-not-allowed') {
+                userMessage = `CRITICAL ERROR: Anonymous sign-in is NOT enabled.
+
+1. Go to your Firebase Console for the 'politofocus' project.
+2. Click "Authentication" on the left menu.
+3. Click the "Sign-in method" tab.
+4. Find "Anonymous" in the provider list and click the pencil icon to enable it.
+
+The app WILL NOT WORK until you do this.
+(Firebase Error Code: auth/operation-not-allowed)`;
+            }
+            
             setAuthError(userMessage);
             setIsAuthenticating(false);
         });
@@ -1574,7 +1583,7 @@ Technical details: ${error.code} - ${error.message}`;
   if (authError) {
       return (
           <div className="w-full h-screen bg-[#f3e5ab] flex flex-col justify-center items-center p-4 text-center">
-              <h1 className="text-5xl md:text-7xl text-red-600 minecraft-text mb-6">Authentication Failed</h1>
+              <h1 className="text-5xl md:text-7xl text-red-600 minecraft-text mb-6">Configuration Error</h1>
               <div className="bg-[#d2b48c] p-8 border-8 border-[#a0522d] max-w-2xl">
                 <p className="text-2xl text-white minecraft-text break-words whitespace-pre-wrap">{authError}</p>
               </div>
