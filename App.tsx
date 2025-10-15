@@ -4,7 +4,8 @@ import { Character, FocusState, SessionType, RewardType, Reward, GreetingMessage
 import { IMAGES, CHARACTER_DATA, AUDIO } from './constants';
 import { database, auth } from './firebase';
 import { ref, onValue, update, set, get, onDisconnect, serverTimestamp, increment, Unsubscribe } from 'firebase/database';
-import { signInAnonymously } from 'firebase/auth';
+// Fix: Use namespace import for firebase/auth to avoid potential module resolution issues.
+import * as firebaseAuth from 'firebase/auth';
 
 // --- CUSTOM HOOKS ---
 function usePrevious<T>(value: T): T | undefined {
@@ -958,11 +959,13 @@ const App: React.FC = () => {
   const prevIsPartnerOnline = usePrevious(isPartnerOnline);
 
   const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
+  const partnerDisplayName = partnerCharacter === Character.Rapunzel ? 'Faryal 💛' : 'Asad 💛';
   
   // Anonymous sign-in
   useEffect(() => {
     console.log("Attempting anonymous sign-in...");
-    signInAnonymously(auth)
+    // Fix: Use signInAnonymously from the firebaseAuth namespace import.
+    firebaseAuth.signInAnonymously(auth)
         .then((userCredential) => {
             console.log("Signed in anonymously. User UID:", userCredential.user.uid);
             console.log("Authentication successful. Firebase will now connect to the database automatically.");
@@ -1620,13 +1623,13 @@ const App: React.FC = () => {
       <audio ref={silentAudioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" loop />
 
       {showOnlineNotification && <OnlinePresenceNotification 
-        partnerName={partnerCharacter} 
+        partnerName={partnerDisplayName} 
         showSendHi={userFocus === FocusState.Focusing && !hiSent}
         onSendHi={handleSendHi}
         onClose={handleCloseOnlineNotification}
       />}
-      {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerCharacter} />}
-      {showJoinNotification && <JoinNotification partnerName={partnerCharacter} />}
+      {showOfflineNotification && <OfflinePresenceNotification partnerName={partnerDisplayName} />}
+      {showJoinNotification && <JoinNotification partnerName={partnerDisplayName} />}
       {receivedReward && <RewardNotification 
             reward={receivedReward} 
             onDismiss={() => setReceivedReward(null)} 
