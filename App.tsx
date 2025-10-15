@@ -1,16 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Character, FocusState, SessionType, RewardType, Reward, GreetingMessage } from './types';
-import { IMAGES, CHARACTER_DATA, AUDIO, firebaseConfig } from './constants';
-
-// --- FIREBASE SETUP ---
-declare const firebase: any;
-
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-// Correctly get the database instance. The databaseURL is already set in the config.
-const database = firebase.database();
-const auth = firebase.auth();
+import { IMAGES, CHARACTER_DATA, AUDIO } from './constants';
+import { database, auth, serverValue } from './firebase';
 
 // --- CUSTOM HOOKS ---
 function usePrevious<T>(value: T): T | undefined {
@@ -973,10 +964,14 @@ const App: React.FC = () => {
         })
         .catch((error: any) => {
             console.error("Anonymous sign-in failed:", error);
-            let userMessage = "Could not connect to the session service. Please check your internet connection and refresh the page.";
-            if (error.code === 'auth/operation-not-allowed') {
-                userMessage = "Connection failed because Anonymous Sign-In is not enabled in your Firebase project. Please go to your Firebase Console -> Authentication -> Sign-in method, and enable the 'Anonymous' provider.";
-            }
+            const userMessage = `A critical error occurred during connection. This is likely a configuration issue with your Firebase project. 
+    
+Please check the following:
+1. The API Key in constants.ts matches the key in your Firebase project settings.
+2. 'Anonymous' sign-in provider is enabled in Firebase Console > Authentication > Sign-in method.
+3. If you have API key restrictions, ensure 'identitytoolkit.googleapis.com' is enabled and your app's URL is a permitted referrer.
+
+Technical details: ${error.code} - ${error.message}`;
             setAuthError(userMessage);
             setIsAuthenticating(false);
         });
@@ -1044,7 +1039,7 @@ const App: React.FC = () => {
         const updates: { [key: string]: any } = {};
 
         if (sessionDurationSec > 0) {
-            updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
+            updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = serverValue.increment(sessionDurationSec);
         }
         
         if (partnerData && (partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
@@ -1060,7 +1055,7 @@ const App: React.FC = () => {
             const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
 
             if (jointDurationSec > 0) {
-                updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
+                updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = serverValue.increment(jointDurationSec);
             }
         }
         
@@ -1377,7 +1372,7 @@ const App: React.FC = () => {
     if (userCharacter) {
       database.ref(`users/${userCharacter}`).update({
         focusState: FocusState.Focusing,
-        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
+        focusStartTime: serverValue.TIMESTAMP,
         totalPausedTime: 0,
         lastPauseStartTime: null,
       }).catch(err => {
@@ -1395,7 +1390,7 @@ const App: React.FC = () => {
     if (userCharacter) {
       database.ref(`users/${userCharacter}`).update({
         focusState: FocusState.Paused,
-        lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
+        lastPauseStartTime: serverValue.TIMESTAMP,
       }).catch(err => {
         console.error("Failed to pause session:", err);
         alert("Could not pause the session. Your state may be out of sync. Please try again.");
@@ -1581,7 +1576,7 @@ const App: React.FC = () => {
           <div className="w-full h-screen bg-[#f3e5ab] flex flex-col justify-center items-center p-4 text-center">
               <h1 className="text-5xl md:text-7xl text-red-600 minecraft-text mb-6">Authentication Failed</h1>
               <div className="bg-[#d2b48c] p-8 border-8 border-[#a0522d] max-w-2xl">
-                <p className="text-2xl text-white minecraft-text break-words">{authError}</p>
+                <p className="text-2xl text-white minecraft-text break-words whitespace-pre-wrap">{authError}</p>
               </div>
           </div>
       );
