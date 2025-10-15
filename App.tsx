@@ -956,17 +956,13 @@ const App: React.FC = () => {
 
   const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
   
-  // Explicitly control connection lifecycle to prevent race condition
+  // Let the Firebase SDK manage its own connection state.
   useEffect(() => {
-    console.log("Forcing database offline until authentication is complete.");
-    database.goOffline();
-
     console.log("Attempting anonymous sign-in...");
     auth.signInAnonymously()
         .then((userCredential: any) => {
             console.log("Signed in anonymously. User UID:", userCredential.user.uid);
-            console.log("Authentication successful. Bringing database online.");
-            database.goOnline(); // Connect to DB only AFTER auth succeeds
+            console.log("Authentication successful. Firebase will now connect to the database automatically.");
             setIsAuthenticating(false);
         })
         .catch((error: any) => {
