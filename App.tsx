@@ -1022,7 +1022,7 @@ const App: React.FC = () => {
         await database.ref().update(updates);
     } catch (error) {
         console.error("Failed to save session data:", error);
-        // Still proceed with UI changes even if save fails, so user is not stuck.
+        alert(`Failed to save session data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
         silentAudioRef.current?.pause();
         setSessionType(SessionType.None);
@@ -1124,6 +1124,11 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!userCharacter) return;
 
+    const dbErrorHandler = (error: Error) => {
+        console.error("Firebase listener error:", error);
+        alert(`A database read error occurred: ${error.message}. The app might not be in sync.`);
+    };
+
     const userStatusRef = database.ref(`users/${userCharacter}`);
 
     // Check for dangling session on load
@@ -1162,7 +1167,7 @@ const App: React.FC = () => {
             setUserLastPauseStartTime(data.lastPauseStartTime || null);
         }
     };
-    userStatusRef.on('value', onUserChange);
+    userStatusRef.on('value', onUserChange, dbErrorHandler);
 
     const onPartnerChange = (snapshot: any) => {
         const data = snapshot.val();
@@ -1181,7 +1186,7 @@ const App: React.FC = () => {
             setPartnerLastPauseStartTime(data.lastPauseStartTime || null);
         }
     };
-    partnerRef.on('value', onPartnerChange);
+    partnerRef.on('value', onPartnerChange, dbErrorHandler);
     
     const onRewardReceived = (snapshot: any) => {
         const reward = snapshot.val();
@@ -1190,7 +1195,7 @@ const App: React.FC = () => {
             userStatusRef.child('lastRewardReceived').set(null).catch(e => console.error("Failed to clear received reward:", e));
         }
     };
-    userStatusRef.child('lastRewardReceived').on('value', onRewardReceived);
+    userStatusRef.child('lastRewardReceived').on('value', onRewardReceived, dbErrorHandler);
 
     const onMessageReceived = (snapshot: any) => {
         const message = snapshot.val();
@@ -1199,7 +1204,7 @@ const App: React.FC = () => {
             userStatusRef.child('lastMessageReceived').set(null).catch(e => console.error("Failed to clear received message:", e));
         }
     };
-    userStatusRef.child('lastMessageReceived').on('value', onMessageReceived);
+    userStatusRef.child('lastMessageReceived').on('value', onMessageReceived, dbErrorHandler);
 
     // --- DAILY STATS LISTENERS ---
     const today = getCycleDateString(Date.now());
@@ -1224,7 +1229,7 @@ const App: React.FC = () => {
     };
     
     (Object.keys(refs) as Array<keyof typeof refs>).forEach(key => {
-        refs[key].on('value', listeners[key]);
+        refs[key].on('value', listeners[key], dbErrorHandler);
     });
 
 

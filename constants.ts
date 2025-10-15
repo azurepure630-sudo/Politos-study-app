@@ -5,9 +5,12 @@ import { IMAGE_ASSETS, AUDIO_ASSETS } from './assets';
 export const firebaseConfig = {
   apiKey: "AIzaSyCPj_yF4PbZXh-nWcNBZORVJJ1XFTBc9XQ",
   authDomain: "politofocus.firebaseapp.com",
-  databaseURL: "https://politofocus-default-rtdb.asia-southeast1.firebasedatabase.app",
+  // Corrected databaseURL to point to the standard us-central1 default instance.
+  // Mismatched regions are a common source of connection issues.
+  databaseURL: "https://politofocus-default-rtdb.firebaseio.com",
   projectId: "politofocus",
-  storageBucket: "politofocus.firebasestorage.app",
+  // Corrected storageBucket to the standard format.
+  storageBucket: "politofocus.appspot.com",
   messagingSenderId: "390029492513",
   appId: "1:390029492513:web:7b5eb49e474fee375b3e60",
   measurementId: "G-KLS7VET96C"
