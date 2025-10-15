@@ -355,15 +355,19 @@ const AudioRecorder: React.FC<{ onRecord: (blob: Blob | null) => void; }> = ({ o
 
 // --- SCREENS & MODALS ---
 
-const OnboardingScreen: React.FC<{ onSelect: (character: Character) => void; }> = ({ onSelect }) => (
+const OnboardingScreen: React.FC<{ onSelect: (character: Character) => void; isSelecting: boolean; }> = ({ onSelect, isSelecting }) => (
   <div className="w-full min-h-screen flex flex-col justify-center items-center bg-[#f3e5ab] p-4 overflow-y-auto">
     <div className="bg-[#d2b48c] p-8 border-8 border-[#a0522d] shadow-lg flex flex-col items-center">
       <h1 className="text-5xl md:text-7xl text-white minecraft-text text-center mb-6">Who is this Polito?</h1>
       <img src={IMAGES.ONBOARDING_PORTRAITS} alt="Flynn and Rapunzel" className="max-w-xs md:max-w-sm w-full border-8 border-[#a0522d] mb-8" />
        <p className="text-3xl text-white minecraft-text mb-6">Choose your character</p>
       <div className="flex flex-col sm:flex-row gap-6">
-        <PixelButton onClick={() => onSelect(Character.Flynn)}>I am Flynn</PixelButton>
-        <PixelButton onClick={() => onSelect(Character.Rapunzel)}>I am Rapunzel</PixelButton>
+        <PixelButton onClick={() => onSelect(Character.Flynn)} disabled={isSelecting}>
+            {isSelecting ? 'Connecting...' : 'I am Flynn'}
+        </PixelButton>
+        <PixelButton onClick={() => onSelect(Character.Rapunzel)} disabled={isSelecting}>
+            {isSelecting ? 'Connecting...' : 'I am Rapunzel'}
+        </PixelButton>
       </div>
     </div>
   </div>
@@ -935,6 +939,7 @@ const App: React.FC = () => {
   const [userElapsedSeconds, setUserElapsedSeconds] = useState(0);
   const [partnerElapsedSeconds, setPartnerElapsedSeconds] = useState(0);
   const [showStats, setShowStats] = useState(false);
+  const [isSelectingCharacter, setIsSelectingCharacter] = useState(false);
 
 
   const musicRef = useRef<HTMLAudioElement>(null);
@@ -1432,19 +1437,32 @@ const App: React.FC = () => {
   }, [userFocus, partnerFocus, isFullscreen, handleStart, handleJoin, handlePause, handleResume, handleEnd, handleToggleMute, handleToggleStats, toggleFullscreen]);
 
 
-  const handleCharacterSelect = async (character: Character) => {
-    try {
-        await database.ref(`users/${character}`).update({
-            focusState: FocusState.Idle,
-            focusStartTime: null,
-            isOnline: true,
-        });
-        setUserCharacter(character);
+  const handleCharacterSelect = (character: Character) => {
+    setIsSelectingCharacter(true);
+
+    // Optimistic UI update: transition to the main app immediately.
+    setUserCharacter(character);
+
+    // Attempt to update Firebase in the background.
+    database.ref(`users/${character}`).update({
+        focusState: FocusState.Idle,
+        focusStartTime: null,
+        isOnline: true,
+    })
+    .then(() => {
+        // Successfully connected and updated.
+        // The app is already on the main screen, so we just need to enable audio.
         setIsMuted(false);
-    } catch (error) {
+    })
+    .catch((error: Error) => {
         console.error("Firebase update failed during character selection:", error);
-        alert("Could not select character. The service may be experiencing issues or you may have lost connection. Please try again later.");
-    }
+        alert("Could not connect to the service. The app will not work correctly. Please check your internet connection and refresh.");
+        // Revert the UI state if the connection fails.
+        setUserCharacter(null);
+    })
+    .finally(() => {
+        setIsSelectingCharacter(false);
+    });
   };
 
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
@@ -1505,7 +1523,7 @@ const App: React.FC = () => {
   };
 
   if (!userCharacter) {
-    return <OnboardingScreen onSelect={handleCharacterSelect} />;
+    return <OnboardingScreen onSelect={handleCharacterSelect} isSelecting={isSelectingCharacter} />;
   }
   
   const isUserInSession = userFocus === FocusState.Focusing || userFocus === FocusState.Paused;
