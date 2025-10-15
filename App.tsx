@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Character, FocusState, SessionType, RewardType, Reward, GreetingMessage } from './types';
 import { IMAGES, CHARACTER_DATA, AUDIO, firebaseConfig } from './constants';
@@ -1337,7 +1336,7 @@ const App: React.FC = () => {
         lastPauseStartTime: null,
       }).catch(err => {
           console.error("Failed to start focus session:", err);
-          alert("Could not start session. Please check your connection and try again.");
+          alert("Could not start the focus session. Your action was not saved. Please check your connection and try again.");
       });
       silentAudioRef.current?.play().catch(e => console.error("Silent audio could not be played", e));
     }
@@ -1353,7 +1352,7 @@ const App: React.FC = () => {
         lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
       }).catch(err => {
         console.error("Failed to pause session:", err);
-        alert("Could not pause session. Please try again.");
+        alert("Could not pause the session. Your state may be out of sync. Please try again.");
       });
       silentAudioRef.current?.pause();
     }
@@ -1379,7 +1378,7 @@ const App: React.FC = () => {
         }
     } catch (error) {
         console.error("Failed to resume session:", error);
-        alert("Could not resume the session. Please try again.");
+        alert("Could not resume the session. Your state may be out of sync. Please try again.");
     }
   }, [userCharacter]);
 
@@ -1456,7 +1455,7 @@ const App: React.FC = () => {
     })
     .catch((error: Error) => {
         console.error("Firebase update failed during character selection:", error);
-        alert("Could not connect to the service. The app will not work correctly. Please check your internet connection and refresh.");
+        alert("Could not save your character choice. Please check your internet connection and refresh the page.");
         // Revert the UI state if the connection fails.
         setUserCharacter(null);
     })
