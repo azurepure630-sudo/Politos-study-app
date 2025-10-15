@@ -3,10 +3,9 @@ import { firebaseConfig } from './constants';
 
 declare const firebase: any;
 
-// Check if Firebase has already been initialized to prevent errors.
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
+// Initialize Firebase directly. The check for existing apps is not necessary
+// in this simple, single-load environment.
+firebase.initializeApp(firebaseConfig);
 
 // Export the initialized services for use throughout the app.
 export const database = firebase.database();
