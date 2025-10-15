@@ -1616,7 +1616,7 @@ const App: React.FC = () => {
     <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
       <ConnectionStatusBanner isVisible={showConnectionBanner} />
       <audio ref={musicRef} src={AUDIO.BACKGROUND_MUSIC} loop />
-      <audio ref={silentAudioRef} src="data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIM+9LjoEc2l6ZQAAHwAAAGs//QQb9RTEuA0QAAAAARBjBwQFAAAAAAD/9A4gBgABcAAAAEAAAETAy//QQb/RxGaA0QAAAAARBjBwQFAAAAAAD/9A4gBgABcAAAAEAAAETAy//QQb/R3ACA0QAAAAARBjBwQFAAAAAAD/9A4gBgABcAAAAEAAAETAy//QQb/R2AAA0QAAAAARBjBwQFAAAAAAD/9A4gBgABcAAAAEAAAETAy" loop />
+      <audio ref={silentAudioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" loop />
 
       {showOnlineNotification && <OnlinePresenceNotification 
         partnerName={partnerCharacter} 
