@@ -958,15 +958,15 @@ const App: React.FC = () => {
   
   // Anonymous Firebase Authentication
   useEffect(() => {
+    console.log("Attempting anonymous sign-in...");
     auth.signInAnonymously()
-        .then(() => {
-            console.log("Signed in anonymously");
+        .then((userCredential: any) => {
+            console.log("Signed in anonymously. User UID:", userCredential.user.uid);
             setIsAuthenticating(false);
         })
         .catch((error: any) => {
-            console.error("Anonymous sign-in failed:", error);
-            // Set a simple error state. The UI will explain the likely cause.
-            setAuthError("Connection failed. Check Firebase project settings.");
+            console.error("Anonymous sign-in failed:", error.code, error.message);
+            setAuthError(`Connection failed: ${error.message}. Check Firebase project settings and authorized domains.`);
             setIsAuthenticating(false);
         });
   }, []);
@@ -991,6 +991,7 @@ const App: React.FC = () => {
       const connectedRef = database.ref('.info/connected');
       const listener = (snapshot: any) => {
           const connected = snapshot.val() === true;
+          console.log(`Firebase Realtime Database connection status: ${connected ? 'Connected' : 'Disconnected'}`);
           
           if (connectionTimeoutRef.current) {
               clearTimeout(connectionTimeoutRef.current);
