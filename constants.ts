@@ -5,8 +5,8 @@ import { IMAGE_ASSETS, AUDIO_ASSETS } from './assets';
 export const firebaseConfig = {
   apiKey: "AIzaSyCPj_yF4PbZXh-nWcNBZORVJJ1XFTBc9XQ",
   authDomain: "politofocus.firebaseapp.com",
-  // Corrected the database URL to point to the standard default region.
-  databaseURL: "https://politofocus-default-rtdb.firebaseio.com",
+  // Corrected the database URL to point to the user's specific region (Singapore).
+  databaseURL: "https://politofocus-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "politofocus",
   storageBucket: "politofocus.appspot.com",
   messagingSenderId: "390029492513",
