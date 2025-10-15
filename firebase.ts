@@ -1,13 +1,10 @@
 // firebase.ts
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
 import { firebaseConfig } from './constants';
 
-declare const firebase: any;
+const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase directly. The check for existing apps is not necessary
-// in this simple, single-load environment.
-firebase.initializeApp(firebaseConfig);
-
-// Export the initialized services for use throughout the app.
-export const database = firebase.database();
-export const auth = firebase.auth();
-export const serverValue = firebase.database.ServerValue;
+export const database = getDatabase(app);
+export const auth = getAuth(app);
