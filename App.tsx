@@ -10,6 +10,7 @@ if (!firebase.apps.length) {
 }
 // Correctly get the database instance. The databaseURL is already set in the config.
 const database = firebase.database();
+const auth = firebase.auth();
 
 // --- CUSTOM HOOKS ---
 function usePrevious<T>(value: T): T | undefined {
@@ -917,6 +918,7 @@ const MainDisplay: React.FC<{
 // --- MAIN APP COMPONENT ---
 
 const App: React.FC = () => {
+  const [isAuthenticating, setIsAuthenticating] = useState(true);
   const [userCharacter, setUserCharacter] = useState<Character | null>(null);
   const [userFocus, setUserFocus] = useState<FocusState>(FocusState.Idle);
   const [userFocusStartTime, setUserFocusStartTime] = useState<number | null>(null);
@@ -960,6 +962,20 @@ const App: React.FC = () => {
   const prevIsPartnerOnline = usePrevious(isPartnerOnline);
 
   const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
+  
+  // Anonymous Firebase Authentication
+  useEffect(() => {
+    auth.signInAnonymously()
+        .then(() => {
+            console.log("Signed in anonymously");
+            setIsAuthenticating(false);
+        })
+        .catch((error: any) => {
+            console.error("Anonymous sign-in failed:", error);
+            alert("Could not connect to the session service. Please check your connection and refresh the page.");
+            // We could show a permanent error screen here
+        });
+}, []);
 
   // Preload images to ensure smooth transitions
   useEffect(() => {
@@ -1545,6 +1561,15 @@ const App: React.FC = () => {
       }
       setShowOnlineNotification(false);
   };
+  
+  if (isAuthenticating) {
+    return (
+        <div className="w-full h-screen bg-[#f3e5ab] flex flex-col justify-center items-center">
+            <h1 className="text-5xl md:text-7xl text-white minecraft-text text-center mb-6">Connecting to Polito...</h1>
+            <div className="animate-spin rounded-full h-32 w-32 border-t-8 border-b-8 border-[#a0522d]"></div>
+        </div>
+    );
+  }
 
   if (!userCharacter) {
     return <OnboardingScreen onSelect={handleCharacterSelect} isSelecting={isSelectingCharacter} />;

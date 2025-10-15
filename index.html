@@ -7,7 +7,7 @@
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://aistudiocdn.com https://www.gstatic.com;
-        connect-src 'self' wss://*.firebasedatabase.app https://*.firebasedatabase.app wss://*.firebaseio.com https://*.firebaseio.com;
+        connect-src 'self' wss://*.firebasedatabase.app https://*.firebasedatabase.app wss://*.firebaseio.com https://*.firebaseio.com https://*.googleapis.com;
         img-src 'self' data: https://i.ibb.co https://raw.githubusercontent.com;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
@@ -70,6 +70,7 @@
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <link rel="stylesheet" href="/index.css">
 </head>
   <body>
