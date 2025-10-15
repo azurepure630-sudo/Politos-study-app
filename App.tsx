@@ -8,8 +8,8 @@ declare const firebase: any;
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
-// Explicitly pass the databaseURL to ensure the correct region is used.
-const database = firebase.database(firebaseConfig.databaseURL);
+// Correctly get the database instance. The databaseURL is already set in the config.
+const database = firebase.database();
 
 // --- CUSTOM HOOKS ---
 function usePrevious<T>(value: T): T | undefined {
