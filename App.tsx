@@ -956,12 +956,17 @@ const App: React.FC = () => {
 
   const partnerCharacter = userCharacter === Character.Flynn ? Character.Rapunzel : Character.Flynn;
   
-  // Anonymous Firebase Authentication
+  // Explicitly control connection lifecycle to prevent race condition
   useEffect(() => {
+    console.log("Forcing database offline until authentication is complete.");
+    database.goOffline();
+
     console.log("Attempting anonymous sign-in...");
     auth.signInAnonymously()
         .then((userCredential: any) => {
             console.log("Signed in anonymously. User UID:", userCredential.user.uid);
+            console.log("Authentication successful. Bringing database online.");
+            database.goOnline(); // Connect to DB only AFTER auth succeeds
             setIsAuthenticating(false);
         })
         .catch((error: any) => {
@@ -1180,7 +1185,7 @@ const App: React.FC = () => {
 
   // --- FIREBASE REAL-TIME LOGIC ---
   useEffect(() => {
-    if (!userCharacter) return;
+    if (isAuthenticating || !userCharacter) return;
 
     const dbErrorHandler = (error: Error) => {
         console.error("Firebase listener error:", error);
@@ -1301,7 +1306,7 @@ const App: React.FC = () => {
             refs[key].off('value', listeners[key]);
         });
     };
-  }, [userCharacter, partnerCharacter, handleEnd]);
+  }, [isAuthenticating, userCharacter, partnerCharacter, handleEnd]);
   
   // --- TIMER CALCULATION LOGIC ---
   useEffect(() => {
