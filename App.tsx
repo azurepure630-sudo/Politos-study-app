@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Character, FocusState, SessionType, RewardType, Reward, GreetingMessage } from './types';
 import { IMAGES, CHARACTER_DATA, AUDIO } from './constants';
 import { database, auth } from './firebase';
-import { ref, onValue, update, set, get, onDisconnect, serverTimestamp, increment, Unsubscribe } from 'firebase/database';
-// Fix: Use namespace import for firebase/auth to avoid potential module resolution issues.
-import * as firebaseAuth from 'firebase/auth';
+
+// This tells TypeScript that a global 'firebase' object exists for ServerValue constants.
+declare var firebase: any;
 
 // --- CUSTOM HOOKS ---
 function usePrevious<T>(value: T): T | undefined {
@@ -964,14 +964,13 @@ const App: React.FC = () => {
   // Anonymous sign-in
   useEffect(() => {
     console.log("Attempting anonymous sign-in...");
-    // Fix: Use signInAnonymously from the firebaseAuth namespace import.
-    firebaseAuth.signInAnonymously(auth)
-        .then((userCredential) => {
+    auth.signInAnonymously()
+        .then((userCredential: any) => {
             console.log("Signed in anonymously. User UID:", userCredential.user.uid);
             console.log("Authentication successful. Firebase will now connect to the database automatically.");
             setIsAuthenticating(false);
         })
-        .catch((error) => {
+        .catch((error: any) => {
             console.error("Anonymous sign-in failed:", error.code, error.message);
             setAuthError(`Connection failed: ${error.message}. Check Firebase project settings and authorized domains.`);
             setIsAuthenticating(false);
@@ -984,7 +983,6 @@ const App: React.FC = () => {
       IMAGES.IDLE,
       IMAGES.JOINT_FOCUS,
       IMAGES.FLYNN_FOCUS_RAPUNZEL_IDLE,
-      // Fix: Corrected typo in image asset name. RAPUNZEL_FOCUS_RAPUNZEL_IDLE does not exist.
       IMAGES.RAPUNZEL_FOCUS_FLYNN_IDLE,
     ];
     
@@ -996,8 +994,8 @@ const App: React.FC = () => {
 
   // Listen to Firebase connection status
   useEffect(() => {
-      const connectedRef = ref(database, '.info/connected');
-      const unsubscribe = onValue(connectedRef, (snapshot) => {
+      const connectedRef = database.ref('.info/connected');
+      const listener = connectedRef.on('value', (snapshot: any) => {
           const connected = snapshot.val() === true;
           console.log(`Firebase Realtime Database connection status: ${connected ? 'Connected' : 'Disconnected'}`);
           
@@ -1013,7 +1011,7 @@ const App: React.FC = () => {
                   setShowConnectionBanner(true);
               }, 2000);
           }
-      }, (error) => {
+      }, (error: Error) => {
           console.error("Error setting up connection listener:", error);
           setShowConnectionBanner(true); // Show immediately on error
       });
@@ -1022,7 +1020,7 @@ const App: React.FC = () => {
           if (connectionTimeoutRef.current) {
               clearTimeout(connectionTimeoutRef.current);
           }
-          unsubscribe();
+          connectedRef.off('value', listener);
       };
   }, []);
   
@@ -1031,10 +1029,10 @@ const App: React.FC = () => {
     const now = Date.now();
     
     try {
-        const userRef = ref(database, `users/${userCharacter}`);
-        const partnerRef = ref(database, `users/${partnerCharacter}`);
+        const userRef = database.ref(`users/${userCharacter}`);
+        const partnerRef = database.ref(`users/${partnerCharacter}`);
 
-        const [userSnapshot, partnerSnapshot] = await Promise.all([get(userRef), get(partnerRef)]);
+        const [userSnapshot, partnerSnapshot] = await Promise.all([userRef.get(), partnerRef.get()]);
         
         const userData = userSnapshot.val();
         const partnerData = partnerSnapshot.val();
@@ -1059,7 +1057,7 @@ const App: React.FC = () => {
         const updates: { [key: string]: any } = {};
 
         if (sessionDurationSec > 0) {
-            updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = increment(sessionDurationSec);
+            updates[`/dailyStats/${todayDateString}/${userCharacter}/totalFocusTime`] = firebase.database.ServerValue.increment(sessionDurationSec);
         }
         
         if (partnerData && (partnerData.focusState === FocusState.Focusing || partnerData.focusState === FocusState.Paused) && partnerData.focusStartTime) {
@@ -1075,7 +1073,7 @@ const App: React.FC = () => {
             const jointDurationSec = jointDurationMs > 0 ? Math.floor(jointDurationMs / 1000) : 0;
 
             if (jointDurationSec > 0) {
-                updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = increment(jointDurationSec);
+                updates[`/dailyStats/${todayDateString}/joint/totalFocusTime`] = firebase.database.ServerValue.increment(jointDurationSec);
             }
         }
         
@@ -1084,7 +1082,7 @@ const App: React.FC = () => {
         updates[`/users/${userCharacter}/totalPausedTime`] = null;
         updates[`/users/${userCharacter}/lastPauseStartTime`] = null;
 
-        await update(ref(database), updates);
+        await database.ref().update(updates);
     } catch (error) {
         console.error("Failed to save session data:", error);
         alert(`Failed to save session data: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1189,17 +1187,16 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isAuthenticating || !userCharacter) return;
     
-    const allUnsubscribes: Unsubscribe[] = [];
-
+    const listeners: { ref: any; eventType: string; callback: (snapshot: any) => void; }[] = [];
     const dbErrorHandler = (error: Error) => {
         console.error("Firebase listener error:", error);
         alert(`A database read error occurred: ${error.message}. The app might not be in sync.`);
     };
 
-    const userStatusRef = ref(database, `users/${userCharacter}`);
+    const userStatusRef = database.ref(`users/${userCharacter}`);
 
     // Check for dangling session on load
-    get(userStatusRef).then((snapshot) => {
+    userStatusRef.get().then((snapshot) => {
         const data = snapshot.val();
         if (data && (data.focusState === FocusState.Focusing || data.focusState === FocusState.Paused) && data.focusStartTime) {
             console.log("Dangling focus session detected. Ending it now.");
@@ -1207,25 +1204,26 @@ const App: React.FC = () => {
         }
     });
 
-    const partnerRef = ref(database, `users/${partnerCharacter}`);
-    
-    const connectedRef = ref(database, '.info/connected');
-    const unsubConnected = onValue(connectedRef, (snapshot) => {
+    const partnerRef = database.ref(`users/${partnerCharacter}`);
+    const connectedRef = database.ref('.info/connected');
+
+    const connectedCallback = (snapshot: any) => {
         if (snapshot.val() === false) return;
         
-        onDisconnect(userStatusRef).update({
+        userStatusRef.onDisconnect().update({
             isOnline: false,
             focusState: FocusState.Idle,
             focusStartTime: null,
             totalPausedTime: null,
             lastPauseStartTime: null,
         }).then(() => {
-            update(userStatusRef, { isOnline: true }).catch(err => console.error("Could not set user online status:", err));
+            userStatusRef.update({ isOnline: true }).catch(err => console.error("Could not set user online status:", err));
         }).catch(err => {
             console.error("Could not set onDisconnect handler:", err)
         });
-    });
-    allUnsubscribes.push(unsubConnected);
+    };
+    connectedRef.on('value', connectedCallback);
+    listeners.push({ ref: connectedRef, eventType: 'value', callback: connectedCallback });
 
     const onUserChange = (snapshot: any) => {
         const data = snapshot.val();
@@ -1236,7 +1234,8 @@ const App: React.FC = () => {
             setUserLastPauseStartTime(data.lastPauseStartTime || null);
         }
     };
-    allUnsubscribes.push(onValue(userStatusRef, onUserChange, dbErrorHandler));
+    userStatusRef.on('value', onUserChange, dbErrorHandler);
+    listeners.push({ ref: userStatusRef, eventType: 'value', callback: onUserChange });
 
     const onPartnerChange = (snapshot: any) => {
         const data = snapshot.val();
@@ -1255,42 +1254,45 @@ const App: React.FC = () => {
             setPartnerLastPauseStartTime(data.lastPauseStartTime || null);
         }
     };
-    allUnsubscribes.push(onValue(partnerRef, onPartnerChange, dbErrorHandler));
+    partnerRef.on('value', onPartnerChange, dbErrorHandler);
+    listeners.push({ ref: partnerRef, eventType: 'value', callback: onPartnerChange });
     
-    const rewardRef = ref(database, `users/${userCharacter}/lastRewardReceived`);
+    const rewardRef = database.ref(`users/${userCharacter}/lastRewardReceived`);
     const onRewardReceived = (snapshot: any) => {
         const reward = snapshot.val();
         if(reward) {
             setReceivedReward(reward);
-            set(rewardRef, null).catch(e => console.error("Failed to clear received reward:", e));
+            rewardRef.set(null).catch(e => console.error("Failed to clear received reward:", e));
         }
     };
-    allUnsubscribes.push(onValue(rewardRef, onRewardReceived, dbErrorHandler));
+    rewardRef.on('value', onRewardReceived, dbErrorHandler);
+    listeners.push({ ref: rewardRef, eventType: 'value', callback: onRewardReceived });
 
-    const messageRef = ref(database, `users/${userCharacter}/lastMessageReceived`);
+    const messageRef = database.ref(`users/${userCharacter}/lastMessageReceived`);
     const onMessageReceived = (snapshot: any) => {
         const message = snapshot.val();
         if(message) {
             setReceivedMessage(message);
-            set(messageRef, null).catch(e => console.error("Failed to clear received message:", e));
+            messageRef.set(null).catch(e => console.error("Failed to clear received message:", e));
         }
     };
-    allUnsubscribes.push(onValue(messageRef, onMessageReceived, dbErrorHandler));
-
+    messageRef.on('value', onMessageReceived, dbErrorHandler);
+    listeners.push({ ref: messageRef, eventType: 'value', callback: onMessageReceived });
+    
     // --- DAILY STATS LISTENERS ---
     const today = getCycleDateString(Date.now());
     const yesterday = getCycleDateString(Date.now() - 24 * 60 * 60 * 1000);
 
     const statRefs = {
-        userToday: ref(database, `dailyStats/${today}/${userCharacter}/totalFocusTime`),
-        userYesterday: ref(database, `dailyStats/${yesterday}/${userCharacter}/totalFocusTime`),
-        partnerToday: ref(database, `dailyStats/${today}/${partnerCharacter}/totalFocusTime`),
-        partnerYesterday: ref(database, `dailyStats/${yesterday}/${partnerCharacter}/totalFocusTime`),
-        jointToday: ref(database, `dailyStats/${today}/joint/totalFocusTime`),
-        jointYesterday: ref(database, `dailyStats/${yesterday}/joint/totalFocusTime`),
+        userToday: database.ref(`dailyStats/${today}/${userCharacter}/totalFocusTime`),
+        userYesterday: database.ref(`dailyStats/${yesterday}/${userCharacter}/totalFocusTime`),
+        partnerToday: database.ref(`dailyStats/${today}/${partnerCharacter}/totalFocusTime`),
+        partnerYesterday: database.ref(`dailyStats/${yesterday}/${partnerCharacter}/totalFocusTime`),
+        jointToday: database.ref(`dailyStats/${today}/joint/totalFocusTime`),
+        jointYesterday: database.ref(`dailyStats/${yesterday}/joint/totalFocusTime`),
     };
 
-    const listeners = {
+    const statCallbacks = {
         userToday: (snap: any) => setUserTodayTime(snap.val() || 0),
         userYesterday: (snap: any) => setUserYesterdayTime(snap.val() || 0),
         partnerToday: (snap: any) => setPartnerTodayTime(snap.val() || 0),
@@ -1300,12 +1302,15 @@ const App: React.FC = () => {
     };
     
     (Object.keys(statRefs) as Array<keyof typeof statRefs>).forEach(key => {
-        allUnsubscribes.push(onValue(statRefs[key], listeners[key], dbErrorHandler));
+        const ref = statRefs[key];
+        const callback = statCallbacks[key];
+        ref.on('value', callback, dbErrorHandler);
+        listeners.push({ ref, eventType: 'value', callback });
     });
 
 
     return () => {
-        allUnsubscribes.forEach(unsubscribe => unsubscribe());
+        listeners.forEach(({ ref, eventType, callback }) => ref.off(eventType, callback));
     };
   }, [isAuthenticating, userCharacter, partnerCharacter, handleEnd]);
   
@@ -1389,10 +1394,10 @@ const App: React.FC = () => {
 
   const startFocusing = useCallback(() => {
     if (userCharacter) {
-      const userRef = ref(database, `users/${userCharacter}`);
-      update(userRef, {
+      const userRef = database.ref(`users/${userCharacter}`);
+      userRef.update({
         focusState: FocusState.Focusing,
-        focusStartTime: serverTimestamp(),
+        focusStartTime: firebase.database.ServerValue.TIMESTAMP,
         totalPausedTime: 0,
         lastPauseStartTime: null,
       }).catch(err => {
@@ -1408,10 +1413,10 @@ const App: React.FC = () => {
 
   const handlePause = useCallback(() => {
     if (userCharacter) {
-      const userRef = ref(database, `users/${userCharacter}`);
-      update(userRef, {
+      const userRef = database.ref(`users/${userCharacter}`);
+      userRef.update({
         focusState: FocusState.Paused,
-        lastPauseStartTime: serverTimestamp(),
+        lastPauseStartTime: firebase.database.ServerValue.TIMESTAMP,
       }).catch(err => {
         console.error("Failed to pause session:", err);
         alert("Could not pause the session. Your state may be out of sync. Please try again.");
@@ -1423,15 +1428,15 @@ const App: React.FC = () => {
   const handleResume = useCallback(async () => {
     if (!userCharacter) return;
     try {
-        const userRef = ref(database, `users/${userCharacter}`);
-        const snapshot = await get(userRef);
+        const userRef = database.ref(`users/${userCharacter}`);
+        const snapshot = await userRef.get();
         const data = snapshot.val();
 
         if (data && data.focusState === FocusState.Paused && data.lastPauseStartTime) {
             const pausedDuration = Date.now() - data.lastPauseStartTime;
             const newTotalPausedTime = (data.totalPausedTime || 0) + pausedDuration;
 
-            await update(userRef, {
+            await userRef.update({
                 focusState: FocusState.Focusing,
                 totalPausedTime: newTotalPausedTime,
                 lastPauseStartTime: null
@@ -1505,8 +1510,8 @@ const App: React.FC = () => {
     setUserCharacter(character);
 
     // Attempt to update Firebase in the background.
-    const userRef = ref(database, `users/${character}`);
-    update(userRef, {
+    const userRef = database.ref(`users/${character}`);
+    userRef.update({
         focusState: FocusState.Idle,
         focusStartTime: null,
         isOnline: true,
@@ -1530,7 +1535,7 @@ const App: React.FC = () => {
   const sendReward = (recipient: Character, reward: Omit<Reward, 'from'>) => {
       if (!userCharacter) return;
       const fullReward: Reward = { ...reward, from: userCharacter };
-      set(ref(database, `users/${recipient}/lastRewardReceived`), fullReward)
+      database.ref(`users/${recipient}/lastRewardReceived`).set(fullReward)
         .catch((error: Error) => {
             console.error("Firebase write error:", error);
             alert(`Failed to send reward: ${error.message}`);
@@ -1557,7 +1562,7 @@ const App: React.FC = () => {
   const handleSendHi = () => {
     if (!userCharacter) return;
     const message: GreetingMessage = { from: userCharacter, content: "hiiii", type: "GREETING" };
-    set(ref(database, `users/${partnerCharacter}/lastMessageReceived`), message).catch(error => {
+    database.ref(`users/${partnerCharacter}/lastMessageReceived`).set(message).catch(error => {
         console.error("Failed to send hi:", error);
         alert("Could not send message. Please check your connection.");
     });

@@ -1,11 +1,13 @@
 // firebase.ts
-import { initializeApp } from 'firebase/app';
-// Fix: Use namespace import for firebase/auth to avoid potential module resolution issues.
-import * as firebaseAuth from 'firebase/auth';
-import { getDatabase } from 'firebase/database';
 import { firebaseConfig } from './constants';
 
-const app = initializeApp(firebaseConfig);
+// This tells TypeScript that a global 'firebase' object exists,
+// which is created by the scripts we added to index.html.
+declare var firebase: any;
 
-export const database = getDatabase(app);
-export const auth = firebaseAuth.getAuth(app);
+// Initialize Firebase from the global object
+const app = firebase.initializeApp(firebaseConfig);
+
+// Use the v8-compat syntax to get the database and auth services
+export const database = firebase.database();
+export const auth = firebase.auth();

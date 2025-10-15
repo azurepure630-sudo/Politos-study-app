@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://aistudiocdn.com https://www.gstatic.com https://apis.google.com https://www.google.com https://identitytoolkit.googleapis.com https://politofocus.firebaseapp.com;
+        script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://www.gstatic.com https://apis.google.com https://www.google.com https://identitytoolkit.googleapis.com https://politofocus.firebaseapp.com;
         connect-src 'self' wss://*.firebasedatabase.app https://*.firebasedatabase.app https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com;
         img-src 'self' data: https://i.ibb.co https://raw.githubusercontent.com;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
@@ -60,19 +60,19 @@
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
-    "firebase/database": "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.4.0/"
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
   }
 }
 </script>
 </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <!-- Load Firebase v9 compatibility scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="/index.tsx"></script>
   </body>
 </html>
