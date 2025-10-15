@@ -919,6 +919,7 @@ const MainDisplay: React.FC<{
 
 const App: React.FC = () => {
   const [isAuthenticating, setIsAuthenticating] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [userCharacter, setUserCharacter] = useState<Character | null>(null);
   const [userFocus, setUserFocus] = useState<FocusState>(FocusState.Idle);
   const [userFocusStartTime, setUserFocusStartTime] = useState<number | null>(null);
@@ -972,8 +973,12 @@ const App: React.FC = () => {
         })
         .catch((error: any) => {
             console.error("Anonymous sign-in failed:", error);
-            alert("Could not connect to the session service. Please check your connection and refresh the page.");
-            // We could show a permanent error screen here
+            let userMessage = "Could not connect to the session service. Please check your internet connection and refresh the page.";
+            if (error.code === 'auth/operation-not-allowed') {
+                userMessage = "Connection failed because Anonymous Sign-In is not enabled in your Firebase project. Please go to your Firebase Console -> Authentication -> Sign-in method, and enable the 'Anonymous' provider.";
+            }
+            setAuthError(userMessage);
+            setIsAuthenticating(false);
         });
 }, []);
 
@@ -1569,6 +1574,17 @@ const App: React.FC = () => {
             <div className="animate-spin rounded-full h-32 w-32 border-t-8 border-b-8 border-[#a0522d]"></div>
         </div>
     );
+  }
+
+  if (authError) {
+      return (
+          <div className="w-full h-screen bg-[#f3e5ab] flex flex-col justify-center items-center p-4 text-center">
+              <h1 className="text-5xl md:text-7xl text-red-600 minecraft-text mb-6">Authentication Failed</h1>
+              <div className="bg-[#d2b48c] p-8 border-8 border-[#a0522d] max-w-2xl">
+                <p className="text-2xl text-white minecraft-text break-words">{authError}</p>
+              </div>
+          </div>
+      );
   }
 
   if (!userCharacter) {
