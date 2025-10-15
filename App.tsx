@@ -15,11 +15,11 @@ function usePrevious<T>(value: T): T | undefined {
 
 // --- HELPERS & UI COMPONENTS ---
 
-const ConnectionStatusBanner: React.FC<{ isConnected: boolean }> = ({ isConnected }) => {
-    if (isConnected) return null;
+const ConnectionStatusBanner: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
+    if (!isVisible) return null;
     return (
-        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center p-2 z-[100] text-xl">
-            Connecting... Please check your internet connection.
+        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center p-2 z-[100] text-xl animate-pulse">
+            Connecting...
         </div>
     );
 };
@@ -943,12 +943,13 @@ const App: React.FC = () => {
   const [partnerElapsedSeconds, setPartnerElapsedSeconds] = useState(0);
   const [showStats, setShowStats] = useState(false);
   const [isSelectingCharacter, setIsSelectingCharacter] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
+  const [showConnectionBanner, setShowConnectionBanner] = useState(false);
 
 
   const musicRef = useRef<HTMLAudioElement>(null);
   const silentAudioRef = useRef<HTMLAudioElement>(null);
   const onlineNotificationTimerRef = useRef<number | null>(null);
+  const connectionTimeoutRef = useRef<number | null>(null);
   const desiredOrientationRef = useRef<string | null>(null);
   const prevPartnerFocus = usePrevious(partnerFocus);
   const prevIsPartnerOnline = usePrevious(isPartnerOnline);
@@ -964,27 +965,11 @@ const App: React.FC = () => {
         })
         .catch((error: any) => {
             console.error("Anonymous sign-in failed:", error);
-            let userMessage = `Could not connect to the server. This is a configuration issue.
-
-Error Code: ${error.code}
-Message: ${error.message}`;
-
-            if (error.code === 'auth/operation-not-allowed') {
-                userMessage = `CRITICAL ERROR: Anonymous sign-in is NOT enabled.
-
-1. Go to your Firebase Console for the 'politofocus' project.
-2. Click "Authentication" on the left menu.
-3. Click the "Sign-in method" tab.
-4. Find "Anonymous" in the provider list and click the pencil icon to enable it.
-
-The app WILL NOT WORK until you do this.
-(Firebase Error Code: auth/operation-not-allowed)`;
-            }
-            
-            setAuthError(userMessage);
+            // Set a simple error state. The UI will explain the likely cause.
+            setAuthError("Connection failed. Check Firebase project settings.");
             setIsAuthenticating(false);
         });
-}, []);
+  }, []);
 
   // Preload images to ensure smooth transitions
   useEffect(() => {
@@ -1006,13 +991,31 @@ The app WILL NOT WORK until you do this.
       const connectedRef = database.ref('.info/connected');
       const listener = (snapshot: any) => {
           const connected = snapshot.val() === true;
-          setIsConnected(connected);
+          
+          if (connectionTimeoutRef.current) {
+              clearTimeout(connectionTimeoutRef.current);
+          }
+
+          if (connected) {
+              setShowConnectionBanner(false);
+          } else {
+              // Only show the banner after 2 seconds of being disconnected
+              connectionTimeoutRef.current = window.setTimeout(() => {
+                  setShowConnectionBanner(true);
+              }, 2000);
+          }
       };
       connectedRef.on('value', listener, (error: Error) => {
           console.error("Error setting up connection listener:", error);
-          setIsConnected(false);
+          setShowConnectionBanner(true); // Show immediately on error
       });
-      return () => connectedRef.off('value', listener);
+
+      return () => {
+          if (connectionTimeoutRef.current) {
+              clearTimeout(connectionTimeoutRef.current);
+          }
+          connectedRef.off('value', listener);
+      };
   }, []);
   
   const handleEnd = useCallback(async () => {
@@ -1583,9 +1586,14 @@ The app WILL NOT WORK until you do this.
   if (authError) {
       return (
           <div className="w-full h-screen bg-[#f3e5ab] flex flex-col justify-center items-center p-4 text-center">
-              <h1 className="text-5xl md:text-7xl text-red-600 minecraft-text mb-6">Configuration Error</h1>
+              <h1 className="text-5xl md:text-7xl text-red-600 minecraft-text mb-6">Connection Failed</h1>
               <div className="bg-[#d2b48c] p-8 border-8 border-[#a0522d] max-w-2xl">
-                <p className="text-2xl text-white minecraft-text break-words whitespace-pre-wrap">{authError}</p>
+                <p className="text-2xl text-white minecraft-text">
+                  The app could not connect to the database. This is usually due to a missing security setting in your Firebase project.
+                </p>
+                 <p className="text-xl text-white mt-4">
+                  Please follow the instructions I provided to fix the "Authorized Domains" in your Firebase Authentication settings.
+                </p>
               </div>
           </div>
       );
@@ -1600,7 +1608,7 @@ The app WILL NOT WORK until you do this.
 
   return (
     <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
-      <ConnectionStatusBanner isConnected={isConnected} />
+      <ConnectionStatusBanner isVisible={showConnectionBanner} />
       <audio ref={musicRef} src={AUDIO.BACKGROUND_MUSIC} loop />
       <audio ref={silentAudioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABgAAABkYXRhAAAAAA==" loop />
 
