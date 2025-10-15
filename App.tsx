@@ -8,7 +8,8 @@ declare const firebase: any;
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
-const database = firebase.database();
+// Explicitly pass the databaseURL to ensure the correct region is used.
+const database = firebase.database(firebaseConfig.databaseURL);
 
 // --- CUSTOM HOOKS ---
 function usePrevious<T>(value: T): T | undefined {
@@ -21,6 +22,15 @@ function usePrevious<T>(value: T): T | undefined {
 
 
 // --- HELPERS & UI COMPONENTS ---
+
+const ConnectionStatusBanner: React.FC<{ isConnected: boolean }> = ({ isConnected }) => {
+    if (isConnected) return null;
+    return (
+        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center p-2 z-[100] text-xl">
+            Connecting... Please check your internet connection.
+        </div>
+    );
+};
 
 const getCycleDateString = (timestamp: number): string => {
     const date = new Date(timestamp);
@@ -939,6 +949,7 @@ const App: React.FC = () => {
   const [partnerElapsedSeconds, setPartnerElapsedSeconds] = useState(0);
   const [showStats, setShowStats] = useState(false);
   const [isSelectingCharacter, setIsSelectingCharacter] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 
 
   const musicRef = useRef<HTMLAudioElement>(null);
@@ -963,7 +974,21 @@ const App: React.FC = () => {
       const img = new Image();
       img.src = src;
     });
-  }, []); // Run only once on component mount
+  }, []);
+
+  // Listen to Firebase connection status
+  useEffect(() => {
+      const connectedRef = database.ref('.info/connected');
+      const listener = (snapshot: any) => {
+          const connected = snapshot.val() === true;
+          setIsConnected(connected);
+      };
+      connectedRef.on('value', listener, (error: Error) => {
+          console.error("Error setting up connection listener:", error);
+          setIsConnected(false);
+      });
+      return () => connectedRef.off('value', listener);
+  }, []);
   
   const handleEnd = useCallback(async () => {
     if (!userCharacter) return;
@@ -1530,6 +1555,7 @@ const App: React.FC = () => {
 
   return (
     <div className="w-full h-screen md:h-auto md:min-h-screen bg-[#61bfff]">
+      <ConnectionStatusBanner isConnected={isConnected} />
       <audio ref={musicRef} src={AUDIO.BACKGROUND_MUSIC} loop />
       <audio ref={silentAudioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABgAAABkYXRhAAAAAA==" loop />
 
